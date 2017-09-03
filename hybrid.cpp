@@ -23,6 +23,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <vector>
 
 #include <mpi.h>
 #include <omp.h>
@@ -577,10 +578,8 @@ void assembleSystem(SparseMatrix& M,
     double s_e[nodesPerElement] = {1.0, 1.0, 1.0, 1.0};
     int Nodes[nodesPerElement] = {0, 0, 0, 0};
 
-    double* Omega = new double[myN_e];
-    double* Gamma = new double[myN_f];
-    int m;
-    int n;
+    std::vector<double> Omega(myN_e);
+    std::vector<double> Gamma(myN_f);
 
     for (int p = 0; p < myN_p; p++)
     {
@@ -659,7 +658,7 @@ void assembleSystem(SparseMatrix& M,
         // Outer loop over each node
         for (int p = 0; p < nodesPerElement; p++)
         {
-            m = Nodes[p];
+            auto const m = Nodes[p];
             Gp[0] = G[0][p];
             Gp[1] = G[1][p];
             Gp[2] = G[2][p];
@@ -667,7 +666,7 @@ void assembleSystem(SparseMatrix& M,
             // Inner loop over each node
             for (int q = 0; q < nodesPerElement; q++)
             {
-                n = Nodes[q];
+                auto const n = Nodes[q];
                 Gq[0] = G[0][q];
                 Gq[1] = G[1][q];
                 Gq[2] = G[2][q];
@@ -690,7 +689,7 @@ void assembleSystem(SparseMatrix& M,
                 for (int p = 0; p < nodesPerFace; p++)
                 {
                     Nodes[p] = Faces[Boundaries[b].indices_[f]][p];
-                    m = Nodes[p];
+                    auto const m = Nodes[p];
                     s[m] += neumann_source_constant * Gamma[Boundaries[b].indices_[f]];
                 }
             }
@@ -702,12 +701,13 @@ void assembleSystem(SparseMatrix& M,
                 for (int p = 0; p < nodesPerFace; p++)
                 {
                     Nodes[p] = Faces[Boundaries[b].indices_[f]][p];
-                    m = Nodes[p];
+                    auto const m = Nodes[p];
                     s[m] -= robin_source_constant * Gamma[Boundaries[b].indices_[f]];
+
                     for (int q = 0; q < nodesPerFace; q++)
                     {
                         Nodes[q] = Faces[Boundaries[b].indices_[f]][q];
-                        n = Nodes[q];
+                        auto const n = Nodes[q];
                         K(m, n) += Gamma[Boundaries[b].indices_[f]] * robin_stiffness_constant
                                    * K_e[p][q];
                     }
@@ -719,8 +719,6 @@ void assembleSystem(SparseMatrix& M,
     K.finalize();
     M.finalize();
 
-    delete[] Gamma;
-    delete[] Omega;
     MPI_Barrier(MPI_COMM_WORLD);
 
     if (myID == 0) std::cout << "Done.\n" << std::flush;
