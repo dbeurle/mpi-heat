@@ -106,7 +106,7 @@ void exchangeData(Vector& u, Boundaries& boundaries)
     }
 }
 
-void readData(char* filename,
+void readData(std::string const& filename,
               Points& points,
               Faces& faces,
               Elements& elements,
@@ -116,7 +116,6 @@ void readData(char* filename,
 {
     std::fstream file;
     std::string temp;
-    char myFileName[64];
 
     int myMaxN_sp = 0;
     int myMaxN_sb = 0;
@@ -127,8 +126,7 @@ void readData(char* filename,
 
     if (myID == 0) std::cout << "Reading " << filename << "'s... " << std::flush;
 
-    sprintf(myFileName, "%s%d", filename, myID);
-    file.open(myFileName);
+    file.open(filename + std::to_string(myID));
 
     int myN_p, myN_f, myN_e, myN_b;
 
@@ -197,10 +195,7 @@ void readData(char* filename,
 
     file.close();
 
-    if (myID == 0)
-    {
-        std::cout << "Done.\n" << std::flush;
-    }
+    if (myID == 0) std::cout << "Done.\n" << std::flush;
 }
 
 void writeData(std::fstream& file,
