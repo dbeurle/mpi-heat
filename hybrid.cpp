@@ -26,8 +26,6 @@
 #include <omp.h>
 #include <stdlib.h>
 
-using namespace std;
-
 // Class definitions
 class SparseMatrix
 {
@@ -94,7 +92,7 @@ public:
         N_nz_rowmax_ = 0;
         for (int m = 0; m < N_row_; m++)
         {
-            N_nz_rowmax_ = max(N_nz_rowmax_, nnzs_[m]);
+            N_nz_rowmax_ = std::max(N_nz_rowmax_, nnzs_[m]);
         }
 
         double* tempVal = new double[N_nz_];
@@ -232,21 +230,21 @@ public:
     inline int getNrow() { return N_row_; }
     void print(const char* name)
     {
-        fstream matrix;
-        cout << "Matrix " << name << " has " << N_row_ << " rows with " << N_nz_
-             << " non-zero entries - " << allocSize_ << " allocated." << flush;
-        matrix.open(name, ios::out);
-        matrix << "Mat = [" << endl;
+        std::fstream matrix;
+        std::cout << "Matrix " << name << " has " << N_row_ << " rows with " << N_nz_
+                  << " non-zero entries - " << allocSize_ << " allocated." << std::flush;
+        matrix.open(name, std::ios::out);
+        matrix << "Mat = [" << std::endl;
         for (int m = 0; m < N_row_; m++)
         {
             for (int n = row_[m]; n < row_[m + 1]; n++)
             {
-                matrix << m + 1 << "\t" << col_[n] + 1 << "\t" << val_[n] << endl;
+                matrix << m + 1 << "\t" << col_[n] + 1 << "\t" << val_[n] << std::endl;
             }
         }
-        matrix << "];" << endl;
+        matrix << "];" << std::endl;
         matrix.close();
-        cout << " Done." << flush << endl;
+        std::cout << " Done." << std::flush << std::endl;
         return;
     }
 
@@ -301,8 +299,8 @@ class Boundary
 {
 public:
     Boundary() {}
-    string name_;
-    string type_;
+    std::string name_;
+    std::string type_;
     int N_;
     int* indices_;
     double value_;
@@ -343,8 +341,14 @@ void readData(char* filename,
               int& myN_b,
               bool*& yourPoints,
               int myID);
-void writeData(
-    fstream& file, double* T, int myN_p, double**& Points, int myN_e, int**& Elements, int l, int myID);
+void writeData(std::fstream& file,
+               double* T,
+               int myN_p,
+               double**& Points,
+               int myN_e,
+               int**& Elements,
+               int l,
+               int myID);
 void assembleSystem(SparseMatrix& M,
                     SparseMatrix& K,
                     double* s,
@@ -379,7 +383,7 @@ int main(int argc, char** argv)
     int myID = 0;
     int N_Processes = 0;
     double t = 0.0;
-    fstream file;
+    std::fstream file;
     double wtime;
     double* Tmax = new double[N_t];
     double tempTmax;
@@ -392,7 +396,7 @@ int main(int argc, char** argv)
     {
         if (myID == 0)
         {
-            cerr << "No grid file specified" << endl;
+            std::cerr << "No grid file specified" << std::endl;
         }
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
@@ -439,7 +443,7 @@ int main(int argc, char** argv)
         t += Delta_t;
         if (myID == 0)
         {
-            cout << "t = " << t << endl;
+            std::cout << "t = " << t << std::endl;
         }
 
         // Assemble b
@@ -464,11 +468,11 @@ int main(int argc, char** argv)
     if (myID == 0)
     {
         wtime = MPI_Wtime() - wtime; // Record the end time and calculate elapsed time
-        cout << "Simulation took " << wtime << " seconds with " << N_Processes << " processes"
-             << endl;
+        std::cout << "Simulation took " << wtime << " seconds with " << N_Processes << " processes"
+                  << std::endl;
 
         // Write maximum temperature to file
-        file.open("maxTemperature.data", ios::out);
+        file.open("maxTemperature.data", std::ios::out);
         for (int m = 0; m < N_t; m++)
         {
             file << Tmax[m] << "\n";
@@ -544,8 +548,8 @@ void readData(char* filename,
               bool*& yourPoints,
               int myID)
 {
-    fstream file;
-    string temp;
+    std::fstream file;
+    std::string temp;
     char myFileName[64];
     int myMaxN_sp = 0;
     int myMaxN_sb = 0;
@@ -554,7 +558,7 @@ void readData(char* filename,
 
     if (myID == 0)
     {
-        cout << "Reading " << filename << "'s... " << flush;
+        std::cout << "Reading " << filename << "'s... " << std::flush;
     }
 
     sprintf(myFileName, "%s%d", filename, myID);
@@ -642,18 +646,24 @@ void readData(char* filename,
 
     if (myID == 0)
     {
-        cout << "Done.\n" << flush;
+        std::cout << "Done.\n" << std::flush;
     }
 
     return;
 } // end of readData
 
-void writeData(
-    fstream& file, double* T, int myN_p, double**& Points, int myN_e, int**& Elements, int l, int myID)
+void writeData(std::fstream& file,
+               double* T,
+               int myN_p,
+               double**& Points,
+               int myN_e,
+               int**& Elements,
+               int l,
+               int myID)
 {
     char myFileName[64];
     sprintf(myFileName, "Temperature_iter_%03d_%06d.vtk", myID, l);
-    file.open(myFileName, ios::out);
+    file.open(myFileName, std::ios::out);
 
     // VTK file output
     // Header
@@ -723,7 +733,7 @@ void assembleSystem(SparseMatrix& M,
 {
     if (myID == 0)
     {
-        cout << "Assembling system... " << flush;
+        std::cout << "Assembling system... " << std::flush;
     }
 
     double x[nodesPerElement];
@@ -890,7 +900,7 @@ void assembleSystem(SparseMatrix& M,
 
     if (myID == 0)
     {
-        cout << "Done.\n" << flush;
+        std::cout << "Done.\n" << std::flush;
     }
 
     return;
@@ -926,7 +936,7 @@ void solve(
 
     if (myID == 0)
     {
-        cout << "Solving... " << endl;
+        std::cout << "Solving... " << std::endl;
     }
 
 #pragma omp parallel default(shared)
@@ -1006,7 +1016,7 @@ void solve(
         {
             if (myID == 0)
             {
-                cout << ", iter = " << iter << ", r_norm = " << r_norm << endl;
+                std::cout << ", iter = " << iter << ", r_norm = " << r_norm << std::endl;
             }
 
             delete[] r_old;
