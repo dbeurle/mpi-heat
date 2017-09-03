@@ -753,17 +753,10 @@ void solve(
     Vector d = Vector::Zero(N_row);
     Vector Ad = Vector::Zero(N_row);
 
-    double* AT = new double[N_row];
-    double alpha = 0.0;
-    double beta = 0.0;
-
-    double tolerance = 1.0e-8;
-    int maxIterations = 2000;
-    int iter = 0;
-
     if (myID == 0) std::cout << "Solving... " << std::endl;
 
     // Compute the initial residual
+    double* AT = new double[N_row];
     A.multiply(AT, T);
 
     exchangeData(AT, Boundaries, myN_b);
@@ -771,8 +764,9 @@ void solve(
     for (int m = 0; m < N_row; m++)
     {
         r_old[m] = b[m] - AT[m];
-        d[m] = r_old[m];
     }
+
+    d = r_old;
 
     auto r_oldTr_old = computeInnerProduct(r_old.data(), r_old.data(), yourPoints, N_row);
 
@@ -780,6 +774,9 @@ void solve(
     auto r_norm = first_r_norm;
 
     // Conjugate Gradient iterative loop
+    double tolerance = 1.0e-8;
+    int maxIterations = 2000;
+    int iter = 0;
     while (r_norm > tolerance && iter < maxIterations)
     {
         A.multiply(Ad.data(), d.data());
@@ -788,7 +785,7 @@ void solve(
 
         auto const dTAd = computeInnerProduct(d.data(), Ad.data(), yourPoints, N_row);
 
-        alpha = r_oldTr_old / dTAd;
+        auto const alpha = r_oldTr_old / dTAd;
 
         for (int m = 0; m < N_row; m++)
         {
@@ -798,7 +795,7 @@ void solve(
 
         auto const rTr = computeInnerProduct(r.data(), r.data(), yourPoints, N_row);
 
-        beta = rTr / r_oldTr_old;
+        auto const beta = rTr / r_oldTr_old;
 
         for (int m = 0; m < N_row; m++)
         {
