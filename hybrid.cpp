@@ -42,14 +42,14 @@ public:
     SparseMatrix()
     {
         // This constructor is called if we have no useful information
-        N_row_       = 0;
-        N_nz_        = 0;
+        N_row_ = 0;
+        N_nz_ = 0;
         N_nz_rowmax_ = 0;
-        allocSize_   = 0;
-        val_         = NULL;
-        col_         = NULL;
-        row_         = NULL;
-        nnzs_        = NULL;
+        allocSize_ = 0;
+        val_ = NULL;
+        col_ = NULL;
+        row_ = NULL;
+        nnzs_ = NULL;
     }
 
     ~SparseMatrix()
@@ -62,14 +62,14 @@ public:
 
     void initialize(int nrow, int nnzperrow)
     {
-        N_row_       = nrow;
-        N_nz_        = 0;
+        N_row_ = nrow;
+        N_nz_ = 0;
         N_nz_rowmax_ = nnzperrow;
-        allocSize_   = N_row_ * N_nz_rowmax_;
-        val_         = new double[allocSize_];
-        col_         = new int[allocSize_];
-        row_         = new int[N_row_ + 1];
-        nnzs_        = new int[N_row_ + 1];
+        allocSize_ = N_row_ * N_nz_rowmax_;
+        val_ = new double[allocSize_];
+        col_ = new int[allocSize_];
+        row_ = new int[N_row_ + 1];
+        nnzs_ = new int[N_row_ + 1];
 
         memset(val_, 0, allocSize_ * sizeof(double));
         memset(col_, -1, allocSize_ * sizeof(int));
@@ -85,9 +85,9 @@ public:
 
     void finalize()
     {
-        int minCol    = 0;
+        int minCol = 0;
         int insertPos = 0;
-        int index     = 0;
+        int index = 0;
 
         // Now that the matrix is assembled we can set N_nz_rowmax_ explicitly by
         // taking the largest value in the nnzs_ array
@@ -98,8 +98,8 @@ public:
         }
 
         double* tempVal = new double[N_nz_];
-        int* tempCol    = new int[N_nz_];
-        int* tempRow    = new int[N_row_ + 1];
+        int* tempCol = new int[N_nz_];
+        int* tempRow = new int[N_row_ + 1];
         // This array will help us sort the column indices
         bool* isSorted = new bool[allocSize_];
 
@@ -117,13 +117,13 @@ public:
                 {
                     if (!isSorted[kk] && col_[kk] < minCol)
                     {
-                        index  = kk;
+                        index = kk;
                         minCol = col_[index];
                     }
                 }
                 tempVal[insertPos] = val_[index];
                 tempCol[insertPos] = col_[index];
-                isSorted[index]    = true;
+                isSorted[index] = true;
                 insertPos++;
             }
             tempRow[m + 1] = tempRow[m] + nnzs_[m];
@@ -135,10 +135,10 @@ public:
         delete[] nnzs_;
         delete[] isSorted;
 
-        val_       = tempVal;
-        col_       = tempCol;
-        row_       = tempRow;
-        nnzs_      = NULL;
+        val_ = tempVal;
+        col_ = tempCol;
+        row_ = tempRow;
+        nnzs_ = NULL;
         allocSize_ = N_nz_;
 
         return;
@@ -146,7 +146,6 @@ public:
 
     inline double& operator()(int m, int n)
     {
-
         // If the arrays are already full and inserting this entry would cause us to
         // run off the end,
         // then we'll need to resize the arrays before inserting it
@@ -155,7 +154,7 @@ public:
             this->reallocate();
         }
 
-        int k           = row_[m];
+        int k = row_[m];
         bool foundEntry = false;
 
         // Search between row(m) and row(m+1) for col(k) = n (i.e. is the entry
@@ -192,13 +191,13 @@ public:
         if (row_) delete[] row_;
         if (nnzs_) delete[] nnzs_;
 
-        N_row_       = A.N_row_;
-        N_nz_        = A.N_nz_;
+        N_row_ = A.N_row_;
+        N_nz_ = A.N_nz_;
         N_nz_rowmax_ = A.N_nz_rowmax_;
-        allocSize_   = A.allocSize_;
-        val_         = new double[allocSize_];
-        col_         = new int[allocSize_];
-        row_         = new int[N_row_ + 1];
+        allocSize_ = A.allocSize_;
+        val_ = new double[allocSize_];
+        col_ = new int[allocSize_];
+        row_ = new int[N_row_ + 1];
 
         memcpy(val_, A.val_, N_nz_ * sizeof(double));
         memcpy(col_, A.col_, N_nz_ * sizeof(int));
@@ -261,7 +260,7 @@ protected:
 
         // Create some temporary arrays of the new size
         double* tempVal = new double[allocSize_];
-        int* tempCol    = new int[allocSize_];
+        int* tempCol = new int[allocSize_];
 
         memset(tempVal, 0, allocSize_ * sizeof(double));
         memset(tempCol, 0, allocSize_ * sizeof(int));
@@ -310,25 +309,25 @@ public:
 };
 
 // Global variables
-const double t_min        = 0.00;
-const double t_max        = 100.0;
-const double Delta_t      = 1.0;
-const double rho          = 8754.0;
-const double C            = 380.0;
-const double k_diff       = 386.0;
-const double Q            = 40000.0;
-const double alpha_heat   = k_diff / (rho * C);
-const double T_air        = 300.0;
-const double h            = -100.0;
-const int numDims         = 3;
-const int nodesPerFace    = 3;
+const double t_min = 0.00;
+const double t_max = 100.0;
+const double Delta_t = 1.0;
+const double rho = 8754.0;
+const double C = 380.0;
+const double k_diff = 386.0;
+const double Q = 40000.0;
+const double alpha_heat = k_diff / (rho * C);
+const double T_air = 300.0;
+const double h = -100.0;
+const int numDims = 3;
+const int nodesPerFace = 3;
 const int nodesPerElement = 4;
 
-const double neumann_source_constant  = Q / (3.0 * rho * C);
-const double robin_source_constant    = T_air * h / (3.0 * rho * C);
+const double neumann_source_constant = Q / (3.0 * rho * C);
+const double robin_source_constant = T_air * h / (3.0 * rho * C);
 const double robin_stiffness_constant = h / (12.0 * rho * C);
 
-const int N_t  = static_cast<int>((t_max - t_min) / Delta_t + 1);
+const int N_t = static_cast<int>((t_max - t_min) / Delta_t + 1);
 int bufferSize = 0;
 double* buffer = NULL;
 
@@ -344,14 +343,8 @@ void readData(char* filename,
               int& myN_b,
               bool*& yourPoints,
               int myID);
-void writeData(fstream& file,
-               double* T,
-               int myN_p,
-               double**& Points,
-               int myN_e,
-               int**& Elements,
-               int l,
-               int myID);
+void writeData(
+    fstream& file, double* T, int myN_p, double**& Points, int myN_e, int**& Elements, int l, int myID);
 void assembleSystem(SparseMatrix& M,
                     SparseMatrix& K,
                     double* s,
@@ -365,32 +358,27 @@ void assembleSystem(SparseMatrix& M,
                     int myN_e,
                     int myN_b,
                     int myID);
-void solve(SparseMatrix& A,
-           double* T,
-           double* b,
-           Boundary* Boundaries,
-           bool* yourPoints,
-           int myN_b,
-           int myID);
+void solve(
+    SparseMatrix& A, double* T, double* b, Boundary* Boundaries, bool* yourPoints, int myN_b, int myID);
 void exchangeData(double* T, Boundary* Boundaries, int myN_b);
 double computeInnerProduct(double* v1, double* v2, bool* yourPoints, int N_row);
 
 int main(int argc, char** argv)
 {
     // Memory Allocation
-    double** Points      = NULL;
-    int** Faces          = NULL;
-    int** Elements       = NULL;
+    double** Points = NULL;
+    int** Faces = NULL;
+    int** Elements = NULL;
     Boundary* Boundaries = NULL;
-    bool* yourPoints     = NULL;
-    double* buffer       = NULL;
-    int myN_p            = 0;
-    int myN_f            = 0;
-    int myN_e            = 0;
-    int myN_b            = 0;
-    int myID             = 0;
-    int N_Processes      = 0;
-    double t             = 0.0;
+    bool* yourPoints = NULL;
+    double* buffer = NULL;
+    int myN_p = 0;
+    int myN_f = 0;
+    int myN_e = 0;
+    int myN_b = 0;
+    int myID = 0;
+    int N_Processes = 0;
+    double t = 0.0;
     fstream file;
     double wtime;
     double* Tmax = new double[N_t];
@@ -409,17 +397,7 @@ int main(int argc, char** argv)
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
-    readData(argv[1],
-             Points,
-             Faces,
-             Elements,
-             Boundaries,
-             myN_p,
-             myN_f,
-             myN_e,
-             myN_b,
-             yourPoints,
-             myID);
+    readData(argv[1], Points, Faces, Elements, Boundaries, myN_p, myN_f, myN_e, myN_b, yourPoints, myID);
 
     // Allocate arrays
     double* T = new double[myN_p];
@@ -441,19 +419,7 @@ int main(int argc, char** argv)
         T[m] = T_air;
     }
 
-    assembleSystem(M,
-                   K,
-                   s,
-                   T,
-                   Points,
-                   Faces,
-                   Elements,
-                   Boundaries,
-                   myN_p,
-                   myN_f,
-                   myN_e,
-                   myN_b,
-                   myID);
+    assembleSystem(M, K, s, T, Points, Faces, Elements, Boundaries, myN_p, myN_f, myN_e, myN_b, myID);
 
     A = M;
 
@@ -498,8 +464,8 @@ int main(int argc, char** argv)
     if (myID == 0)
     {
         wtime = MPI_Wtime() - wtime; // Record the end time and calculate elapsed time
-        cout << "Simulation took " << wtime << " seconds with " << N_Processes
-             << " processes" << endl;
+        cout << "Simulation took " << wtime << " seconds with " << N_Processes << " processes"
+             << endl;
 
         // Write maximum temperature to file
         file.open("maxTemperature.data", ios::out);
@@ -537,7 +503,7 @@ int main(int argc, char** argv)
 void exchangeData(double* T, Boundary* Boundaries, int myN_b)
 {
     int yourID = 0;
-    int tag    = 0;
+    int tag = 0;
     MPI_Status status;
 
     for (int b = 0; b < myN_b; b++)
@@ -557,13 +523,7 @@ void exchangeData(double* T, Boundary* Boundaries, int myN_b)
         if (Boundaries[b].type_ == "interprocess")
         {
             yourID = static_cast<int>(Boundaries[b].value_);
-            MPI_Recv(buffer,
-                     Boundaries[b].N_,
-                     MPI_DOUBLE,
-                     yourID,
-                     tag,
-                     MPI_COMM_WORLD,
-                     &status);
+            MPI_Recv(buffer, Boundaries[b].N_, MPI_DOUBLE, yourID, tag, MPI_COMM_WORLD, &status);
             for (int p = 0; p < Boundaries[b].N_; p++)
             {
                 T[Boundaries[b].indices_[p]] += buffer[p];
@@ -589,8 +549,8 @@ void readData(char* filename,
     char myFileName[64];
     int myMaxN_sp = 0;
     int myMaxN_sb = 0;
-    int maxN_sp   = 0;
-    int yourID    = 0;
+    int maxN_sp = 0;
+    int yourID = 0;
 
     if (myID == 0)
     {
@@ -605,14 +565,14 @@ void readData(char* filename,
     file >> temp >> myN_e;
     file >> temp >> myN_b;
 
-    Points      = new double*[myN_p];
-    Faces       = new int*[myN_f];
-    Elements    = new int*[myN_e];
-    Boundaries  = new Boundary[myN_b];
-    Points[0]   = new double[myN_p * numDims];
-    Faces[0]    = new int[myN_f * nodesPerFace];
+    Points = new double*[myN_p];
+    Faces = new int*[myN_f];
+    Elements = new int*[myN_e];
+    Boundaries = new Boundary[myN_b];
+    Points[0] = new double[myN_p * numDims];
+    Faces[0] = new int[myN_f * nodesPerFace];
     Elements[0] = new int[myN_e * nodesPerElement];
-    yourPoints  = new bool[myN_p];
+    yourPoints = new bool[myN_p];
 
     for (int p = 1, pp = numDims; p < myN_p; p++, pp += numDims)
     {
@@ -662,7 +622,7 @@ void readData(char* filename,
         {
             myMaxN_sb++;
             myMaxN_sp = std::max(myMaxN_sp, Boundaries[b].N_);
-            yourID    = static_cast<int>(Boundaries[b].value_);
+            yourID = static_cast<int>(Boundaries[b].value_);
             if (yourID > myID)
             {
                 for (int p = 0; p < Boundaries[b].N_; p++)
@@ -674,7 +634,7 @@ void readData(char* filename,
     }
 
     MPI_Allreduce(&myMaxN_sp, &maxN_sp, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
-    buffer     = new double[maxN_sp];
+    buffer = new double[maxN_sp];
     bufferSize = (maxN_sp * sizeof(double) + MPI_BSEND_OVERHEAD) * myMaxN_sb;
     MPI_Buffer_attach(new char[bufferSize], bufferSize);
 
@@ -688,14 +648,8 @@ void readData(char* filename,
     return;
 } // end of readData
 
-void writeData(fstream& file,
-               double* T,
-               int myN_p,
-               double**& Points,
-               int myN_e,
-               int**& Elements,
-               int l,
-               int myID)
+void writeData(
+    fstream& file, double* T, int myN_p, double**& Points, int myN_e, int**& Elements, int l, int myID)
 {
     char myFileName[64];
     sprintf(myFileName, "Temperature_iter_%03d_%06d.vtk", myID, l);
@@ -726,8 +680,8 @@ void writeData(fstream& file,
     for (int e = 0; e < myN_e; e++)
     {
         file << "4"
-             << "\t" << Elements[e][0] << "\t" << Elements[e][1] << "\t" << Elements[e][2]
-             << "\t" << Elements[e][3] << "\n";
+             << "\t" << Elements[e][0] << "\t" << Elements[e][1] << "\t" << Elements[e][2] << "\t"
+             << Elements[e][3] << "\n";
     }
     // Element/Cell types
     file << "CELL_TYPES " << myN_e << "\n";
@@ -767,7 +721,6 @@ void assembleSystem(SparseMatrix& M,
                     int myN_b,
                     int myID)
 {
-
     if (myID == 0)
     {
         cout << "Assembling system... " << flush;
@@ -786,10 +739,9 @@ void assembleSystem(SparseMatrix& M,
                                                     {1.0, 2.0, 1.0, 1.0},
                                                     {1.0, 1.0, 2.0, 1.0},
                                                     {1.0, 1.0, 1.0, 2.0}};
-    double K_e[nodesPerFace][nodesPerFace] = {
-        {2.0, 1.0, 1.0}, {1.0, 2.0, 1.0}, {1.0, 1.0, 2.0}};
+    double K_e[nodesPerFace][nodesPerFace] = {{2.0, 1.0, 1.0}, {1.0, 2.0, 1.0}, {1.0, 1.0, 2.0}};
     double s_e[nodesPerElement] = {1.0, 1.0, 1.0, 1.0};
-    int Nodes[nodesPerElement]  = {0, 0, 0, 0};
+    int Nodes[nodesPerElement] = {0, 0, 0, 0};
 
     double* Omega = new double[myN_e];
     double* Gamma = new double[myN_f];
@@ -805,19 +757,16 @@ void assembleSystem(SparseMatrix& M,
 
     for (int f = 0; f < myN_f; f++)
     {
-
         for (int p = 0; p < nodesPerFace; p++)
         {
             x[p] = Points[Faces[f][p]][0];
             y[p] = Points[Faces[f][p]][1];
             z[p] = Points[Faces[f][p]][2];
         }
-        Gamma[f] =
-            sqrt(
-                pow((y[1] - y[0]) * (z[2] - z[0]) - (z[1] - z[0]) * (y[2] - y[0]), 2.0) +
-                pow((z[1] - z[0]) * (x[2] - x[0]) - (x[1] - x[0]) * (z[2] - z[0]), 2.0) +
-                pow((x[1] - x[0]) * (y[2] - y[0]) - (y[1] - y[0]) * (x[2] - x[0]), 2.0)) /
-            2.0;
+        Gamma[f] = sqrt(pow((y[1] - y[0]) * (z[2] - z[0]) - (z[1] - z[0]) * (y[2] - y[0]), 2.0)
+                        + pow((z[1] - z[0]) * (x[2] - x[0]) - (x[1] - x[0]) * (z[2] - z[0]), 2.0)
+                        + pow((x[1] - x[0]) * (y[2] - y[0]) - (y[1] - y[0]) * (x[2] - x[0]), 2.0))
+                   / 2.0;
     }
 
     // Calculate element volumes
@@ -831,15 +780,14 @@ void assembleSystem(SparseMatrix& M,
             z[p] = Points[Elements[e][p]][2];
         }
 
-        Omega[e] = fabs((x[0] * y[1] * z[2] - x[0] * y[2] * z[1] - x[1] * y[0] * z[2] +
-                         x[1] * y[2] * z[0] + x[2] * y[0] * z[1] - x[2] * y[1] * z[0] -
-                         x[0] * y[1] * z[3] + x[0] * y[3] * z[1] + x[1] * y[0] * z[3] -
-                         x[1] * y[3] * z[0] - x[3] * y[0] * z[1] + x[3] * y[1] * z[0] +
-                         x[0] * y[2] * z[3] - x[0] * y[3] * z[2] - x[2] * y[0] * z[3] +
-                         x[2] * y[3] * z[0] + x[3] * y[0] * z[2] - x[3] * y[2] * z[0] -
-                         x[1] * y[2] * z[3] + x[1] * y[3] * z[2] + x[2] * y[1] * z[3] -
-                         x[2] * y[3] * z[1] - x[3] * y[1] * z[2] + x[3] * y[2] * z[1]) /
-                        6.0);
+        Omega[e] = fabs(
+            (x[0] * y[1] * z[2] - x[0] * y[2] * z[1] - x[1] * y[0] * z[2] + x[1] * y[2] * z[0]
+             + x[2] * y[0] * z[1] - x[2] * y[1] * z[0] - x[0] * y[1] * z[3] + x[0] * y[3] * z[1]
+             + x[1] * y[0] * z[3] - x[1] * y[3] * z[0] - x[3] * y[0] * z[1] + x[3] * y[1] * z[0]
+             + x[0] * y[2] * z[3] - x[0] * y[3] * z[2] - x[2] * y[0] * z[3] + x[2] * y[3] * z[0]
+             + x[3] * y[0] * z[2] - x[3] * y[2] * z[0] - x[1] * y[2] * z[3] + x[1] * y[3] * z[2]
+             + x[2] * y[1] * z[3] - x[2] * y[3] * z[1] - x[3] * y[1] * z[2] + x[3] * y[2] * z[1])
+            / 6.0);
     }
 
     // Assemble M, K, and s
@@ -852,31 +800,31 @@ void assembleSystem(SparseMatrix& M,
         for (int p = 0; p < nodesPerElement; p++)
         {
             Nodes[p] = Elements[e][p];
-            x[p]     = Points[Nodes[p]][0];
-            y[p]     = Points[Nodes[p]][1];
-            z[p]     = Points[Nodes[p]][2];
+            x[p] = Points[Nodes[p]][0];
+            y[p] = Points[Nodes[p]][1];
+            z[p] = Points[Nodes[p]][2];
         }
 
-        double G[numDims][nodesPerElement] = {
-            {(y[3] - y[1]) * (z[2] - z[1]) - (y[2] - y[1]) * (z[3] - z[1]),
-             (y[2] - y[0]) * (z[3] - z[2]) - (y[2] - y[3]) * (z[0] - z[2]),
-             (y[1] - y[3]) * (z[0] - z[3]) - (y[0] - y[3]) * (z[1] - z[3]),
-             (y[0] - y[2]) * (z[1] - z[0]) - (y[0] - y[1]) * (z[2] - z[0])},
+        double G[numDims][nodesPerElement] =
+            {{(y[3] - y[1]) * (z[2] - z[1]) - (y[2] - y[1]) * (z[3] - z[1]),
+              (y[2] - y[0]) * (z[3] - z[2]) - (y[2] - y[3]) * (z[0] - z[2]),
+              (y[1] - y[3]) * (z[0] - z[3]) - (y[0] - y[3]) * (z[1] - z[3]),
+              (y[0] - y[2]) * (z[1] - z[0]) - (y[0] - y[1]) * (z[2] - z[0])},
 
-            {(x[2] - x[1]) * (z[3] - z[1]) - (x[3] - x[1]) * (z[2] - z[1]),
-             (x[3] - x[2]) * (z[2] - z[0]) - (x[0] - x[2]) * (z[2] - z[3]),
-             (x[0] - x[3]) * (z[1] - z[3]) - (x[1] - x[3]) * (z[0] - z[3]),
-             (x[1] - x[0]) * (z[0] - z[2]) - (x[2] - x[0]) * (z[0] - z[1])},
+             {(x[2] - x[1]) * (z[3] - z[1]) - (x[3] - x[1]) * (z[2] - z[1]),
+              (x[3] - x[2]) * (z[2] - z[0]) - (x[0] - x[2]) * (z[2] - z[3]),
+              (x[0] - x[3]) * (z[1] - z[3]) - (x[1] - x[3]) * (z[0] - z[3]),
+              (x[1] - x[0]) * (z[0] - z[2]) - (x[2] - x[0]) * (z[0] - z[1])},
 
-            {(x[3] - x[1]) * (y[2] - y[1]) - (x[2] - x[1]) * (y[3] - y[1]),
-             (x[2] - x[0]) * (y[3] - y[2]) - (x[2] - x[3]) * (y[0] - y[2]),
-             (x[1] - x[3]) * (y[0] - y[3]) - (x[0] - x[3]) * (y[1] - y[3]),
-             (x[0] - x[2]) * (y[1] - y[0]) - (x[0] - x[1]) * (y[2] - y[0])}};
+             {(x[3] - x[1]) * (y[2] - y[1]) - (x[2] - x[1]) * (y[3] - y[1]),
+              (x[2] - x[0]) * (y[3] - y[2]) - (x[2] - x[3]) * (y[0] - y[2]),
+              (x[1] - x[3]) * (y[0] - y[3]) - (x[0] - x[3]) * (y[1] - y[3]),
+              (x[0] - x[2]) * (y[1] - y[0]) - (x[0] - x[1]) * (y[2] - y[0])}};
 
         // Outer loop over each node
         for (int p = 0; p < nodesPerElement; p++)
         {
-            m     = Nodes[p];
+            m = Nodes[p];
             Gp[0] = G[0][p];
             Gp[1] = G[1][p];
             Gp[2] = G[2][p];
@@ -884,14 +832,14 @@ void assembleSystem(SparseMatrix& M,
             // Inner loop over each node
             for (int q = 0; q < nodesPerElement; q++)
             {
-                n     = Nodes[q];
+                n = Nodes[q];
                 Gq[0] = G[0][q];
                 Gq[1] = G[1][q];
                 Gq[2] = G[2][q];
 
                 M(m, n) += M_e[p][q] * Omega[e] / 20.0;
-                K(m, n) -= alpha_heat * (Gp[0] * Gq[0] + Gp[1] * Gq[1] + Gp[2] * Gq[2]) /
-                           (36.0 * Omega[e]);
+                K(m, n) -= alpha_heat * (Gp[0] * Gq[0] + Gp[1] * Gq[1] + Gp[2] * Gq[2])
+                           / (36.0 * Omega[e]);
             }
         }
     }
@@ -907,7 +855,7 @@ void assembleSystem(SparseMatrix& M,
                 for (int p = 0; p < nodesPerFace; p++)
                 {
                     Nodes[p] = Faces[Boundaries[b].indices_[f]][p];
-                    m        = Nodes[p];
+                    m = Nodes[p];
                     s[m] += neumann_source_constant * Gamma[Boundaries[b].indices_[f]];
                 }
             }
@@ -919,14 +867,14 @@ void assembleSystem(SparseMatrix& M,
                 for (int p = 0; p < nodesPerFace; p++)
                 {
                     Nodes[p] = Faces[Boundaries[b].indices_[f]][p];
-                    m        = Nodes[p];
+                    m = Nodes[p];
                     s[m] -= robin_source_constant * Gamma[Boundaries[b].indices_[f]];
                     for (int q = 0; q < nodesPerFace; q++)
                     {
                         Nodes[q] = Faces[Boundaries[b].indices_[f]][q];
-                        n        = Nodes[q];
-                        K(m, n) += Gamma[Boundaries[b].indices_[f]] *
-                                   robin_stiffness_constant * K_e[p][q];
+                        n = Nodes[q];
+                        K(m, n) += Gamma[Boundaries[b].indices_[f]] * robin_stiffness_constant
+                                   * K_e[p][q];
                     }
                 }
             }
@@ -948,33 +896,28 @@ void assembleSystem(SparseMatrix& M,
     return;
 } // end of assembleSystem
 
-void solve(SparseMatrix& A,
-           double* T,
-           double* b,
-           Boundary* Boundaries,
-           bool* yourPoints,
-           int myN_b,
-           int myID)
+void solve(
+    SparseMatrix& A, double* T, double* b, Boundary* Boundaries, bool* yourPoints, int myN_b, int myID)
 {
-    int N_row                 = A.getNrow();
-    double* r                 = new double[N_row];
-    double* r_old             = new double[N_row];
-    double* d                 = new double[N_row];
-    double* Ad                = new double[N_row];
-    double* AT                = new double[N_row];
-    static double alpha       = 0.0;
-    static double beta        = 0.0;
-    static double r_norm      = 0.0;
-    double first_r_norm       = 0.0;
-    double tolerance          = 1.0e-8;
-    int maxIterations         = 2000;
-    int iter                  = 0;
-    int k                     = 0;
-    int m                     = 0;
-    int n                     = 0;
+    int N_row = A.getNrow();
+    double* r = new double[N_row];
+    double* r_old = new double[N_row];
+    double* d = new double[N_row];
+    double* Ad = new double[N_row];
+    double* AT = new double[N_row];
+    static double alpha = 0.0;
+    static double beta = 0.0;
+    static double r_norm = 0.0;
+    double first_r_norm = 0.0;
+    double tolerance = 1.0e-8;
+    int maxIterations = 2000;
+    int iter = 0;
+    int k = 0;
+    int m = 0;
+    int n = 0;
     static double r_oldTr_old = 0.0;
-    static double rTr         = 0.0;
-    static double dTAd        = 0.0;
+    static double rTr = 0.0;
+    static double dTAd = 0.0;
 
     memset(r_old, 0, N_row * sizeof(double));
     memset(r, 0, N_row * sizeof(double));
@@ -1000,7 +943,7 @@ void solve(SparseMatrix& A,
         for (m = 0; m < N_row; m++)
         {
             r_old[m] = b[m] - AT[m];
-            d[m]     = r_old[m];
+            d[m] = r_old[m];
         }
 
         r_oldTr_old = computeInnerProduct(r_old, r_old, yourPoints, N_row);
@@ -1008,7 +951,7 @@ void solve(SparseMatrix& A,
 #pragma omp single
         {
             first_r_norm = sqrt(r_oldTr_old);
-            r_norm       = 1.0;
+            r_norm = 1.0;
         }
 
         // Conjugate Gradient iterative loop
@@ -1045,7 +988,7 @@ void solve(SparseMatrix& A,
 #pragma omp for private(m)
             for (m = 0; m < N_row; m++)
             {
-                d[m]     = r[m] + beta * d[m];
+                d[m] = r[m] + beta * d[m];
                 r_old[m] = r[m];
             }
 
@@ -1085,7 +1028,7 @@ double computeInnerProduct(double* v1, double* v2, bool* yourPoints, int N_row)
     static double innerProduct;
 
     myInnerProduct = 0.0;
-    innerProduct   = 0.0;
+    innerProduct = 0.0;
 
     int m;
 
@@ -1100,8 +1043,7 @@ double computeInnerProduct(double* v1, double* v2, bool* yourPoints, int N_row)
 
 #pragma omp single
     {
-        MPI_Allreduce(
-            &myInnerProduct, &innerProduct, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+        MPI_Allreduce(&myInnerProduct, &innerProduct, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     }
 
     return innerProduct;
