@@ -750,10 +750,9 @@ void solve(
 
     Vector r = Vector::Zero(N_row);
     Vector r_old = Vector::Zero(N_row);
-    Vector d = Vector::Zero(N_row);
     Vector Ad = Vector::Zero(N_row);
 
-    if (myID == 0) std::cout << "Solving... " << std::endl;
+    if (myID == 0) std::cout << "Solving..." << std::endl;
 
     // Compute the initial residual
     double* AT = new double[N_row];
@@ -766,7 +765,7 @@ void solve(
         r_old[m] = b[m] - AT[m];
     }
 
-    d = r_old;
+    Vector d = r_old;
 
     auto r_oldTr_old = computeInnerProduct(r_old.data(), r_old.data(), yourPoints, N_row);
 
@@ -797,11 +796,8 @@ void solve(
 
         auto const beta = rTr / r_oldTr_old;
 
-        for (int m = 0; m < N_row; m++)
-        {
-            d[m] = r[m] + beta * d[m];
-            r_old[m] = r[m];
-        }
+        d = r + beta * d;
+        r_old = r;
 
         r_oldTr_old = rTr;
 
