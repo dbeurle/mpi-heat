@@ -753,7 +753,6 @@ void solve(SparseMatrix& A,
     int N_row = A.getNrow();
 
     Vector r = Vector::Zero(N_row);
-    Vector r_old = Vector::Zero(N_row);
     Vector Ad = Vector::Zero(N_row);
     Vector AT = Vector::Zero(N_row);
 
@@ -764,10 +763,7 @@ void solve(SparseMatrix& A,
 
     exchangeData(AT, Boundaries, myN_b);
 
-    for (int m = 0; m < N_row; m++)
-    {
-        r_old[m] = b[m] - AT[m];
-    }
+    Vector r_old = b - AT;
 
     Vector d = r_old;
 
