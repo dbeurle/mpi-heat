@@ -30,6 +30,7 @@
 #include <mpi.h>
 #include <omp.h>
 
+using Vector = Eigen::VectorXd;
 using Vector3 = Eigen::Vector3d;
 
 // Class definitions
@@ -746,10 +747,12 @@ void solve(
     SparseMatrix& A, double* T, double* b, Boundary* Boundaries, bool* yourPoints, int myN_b, int myID)
 {
     int N_row = A.getNrow();
-    double* r = new double[N_row];
-    double* r_old = new double[N_row];
-    double* d = new double[N_row];
-    double* Ad = new double[N_row];
+
+    Vector r = Vector::Zero(N_row);
+    Vector r_old = Vector::Zero(N_row);
+    Vector d = Vector::Zero(N_row);
+    Vector Ad = Vector::Zero(N_row);
+
     double* AT = new double[N_row];
     double alpha = 0.0;
     double beta = 0.0;
@@ -765,15 +768,7 @@ void solve(
     double rTr = 0.0;
     double dTAd = 0.0;
 
-    memset(r_old, 0, N_row * sizeof(double));
-    memset(r, 0, N_row * sizeof(double));
-    memset(d, 0, N_row * sizeof(double));
-    memset(Ad, 0, N_row * sizeof(double));
-
-    if (myID == 0)
-    {
-        std::cout << "Solving... " << std::endl;
-    }
+    if (myID == 0) std::cout << "Solving... " << std::endl;
 
     // Compute the initial residual
     A.multiply(AT, T);
@@ -786,7 +781,7 @@ void solve(
         d[m] = r_old[m];
     }
 
-    r_oldTr_old = computeInnerProduct(r_old, r_old, yourPoints, N_row);
+    r_oldTr_old = computeInnerProduct(r_old.data(), r_old.data(), yourPoints, N_row);
 
     first_r_norm = std::sqrt(r_oldTr_old);
     r_norm = 1.0;
@@ -794,11 +789,11 @@ void solve(
     // Conjugate Gradient iterative loop
     while (r_norm > tolerance && iter < maxIterations)
     {
-        A.multiply(Ad, d);
+        A.multiply(Ad.data(), d.data());
 
-        exchangeData(Ad, Boundaries, myN_b);
+        exchangeData(Ad.data(), Boundaries, myN_b);
 
-        dTAd = computeInnerProduct(d, Ad, yourPoints, N_row);
+        dTAd = computeInnerProduct(d.data(), Ad.data(), yourPoints, N_row);
 
         alpha = r_oldTr_old / dTAd;
 
@@ -808,7 +803,7 @@ void solve(
             r[m] = r_old[m] - alpha * Ad[m];
         }
 
-        rTr = computeInnerProduct(r, r, yourPoints, N_row);
+        rTr = computeInnerProduct(r.data(), r.data(), yourPoints, N_row);
 
         beta = rTr / r_oldTr_old;
 
@@ -828,11 +823,6 @@ void solve(
     {
         std::cout << ", iter = " << iter << ", r_norm = " << r_norm << std::endl;
     }
-
-    delete[] r_old;
-    delete[] r;
-    delete[] d;
-    delete[] Ad;
     delete[] AT;
 }
 
