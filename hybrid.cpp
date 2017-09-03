@@ -329,181 +329,6 @@ const int N_t = static_cast<int>((t_max - t_min) / Delta_t + 1);
 int bufferSize = 0;
 double* buffer = NULL;
 
-// Function declarations
-void readData(char* filename,
-              double**& Points,
-              int**& Faces,
-              int**& Elements,
-              Boundary*& Boundaries,
-              int& myN_p,
-              int& myN_f,
-              int& myN_e,
-              int& myN_b,
-              bool*& yourPoints,
-              int myID);
-void writeData(std::fstream& file,
-               double* T,
-               int myN_p,
-               double**& Points,
-               int myN_e,
-               int**& Elements,
-               int l,
-               int myID);
-void assembleSystem(SparseMatrix& M,
-                    SparseMatrix& K,
-                    double* s,
-                    double* T,
-                    double** Points,
-                    int** Faces,
-                    int** Elements,
-                    Boundary* Boundaries,
-                    int myN_p,
-                    int myN_f,
-                    int myN_e,
-                    int myN_b,
-                    int myID);
-void solve(
-    SparseMatrix& A, double* T, double* b, Boundary* Boundaries, bool* yourPoints, int myN_b, int myID);
-void exchangeData(double* T, Boundary* Boundaries, int myN_b);
-double computeInnerProduct(double* v1, double* v2, bool* yourPoints, int N_row);
-
-int main(int argc, char** argv)
-{
-    // Memory Allocation
-    double** Points = NULL;
-    int** Faces = NULL;
-    int** Elements = NULL;
-    Boundary* Boundaries = NULL;
-    bool* yourPoints = NULL;
-    double* buffer = NULL;
-    int myN_p = 0;
-    int myN_f = 0;
-    int myN_e = 0;
-    int myN_b = 0;
-    int myID = 0;
-    int N_Processes = 0;
-    double t = 0.0;
-    std::fstream file;
-    double wtime;
-    double* Tmax = new double[N_t];
-    double tempTmax;
-
-    MPI_Init(&argc, &argv);
-    MPI_Comm_rank(MPI_COMM_WORLD, &myID);
-    MPI_Comm_size(MPI_COMM_WORLD, &N_Processes);
-
-    if (argc < 2)
-    {
-        if (myID == 0)
-        {
-            std::cerr << "No grid file specified" << std::endl;
-        }
-        MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-
-    readData(argv[1], Points, Faces, Elements, Boundaries, myN_p, myN_f, myN_e, myN_b, yourPoints, myID);
-
-    // Allocate arrays
-    double* T = new double[myN_p];
-    double* s = new double[myN_p];
-    double* b = new double[myN_p];
-    SparseMatrix M;
-    SparseMatrix K;
-    SparseMatrix A;
-
-    if (myID == 0)
-    {
-        wtime = MPI_Wtime();
-    }
-
-    // Set initial condition
-    t = t_min;
-    for (int m = 0; m < myN_p; m++)
-    {
-        T[m] = T_air;
-    }
-
-    assembleSystem(M, K, s, T, Points, Faces, Elements, Boundaries, myN_p, myN_f, myN_e, myN_b, myID);
-
-    A = M;
-
-    A.subtract(Delta_t, K); // At this point we have A = M-Delta_t*K
-
-    exchangeData(s, Boundaries, myN_b);
-
-    // writeData(file, T, myN_p, Points, myN_e, Elements,0,myID);
-
-    // Get Max Temperature
-    tempTmax = *std::max_element(T, T + myN_p);
-    MPI_Allreduce(&tempTmax, &Tmax[0], 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-
-    // Time marching loop
-    for (int l = 1; l < N_t; l++)
-    {
-        t += Delta_t;
-        if (myID == 0)
-        {
-            std::cout << "t = " << t << std::endl;
-        }
-
-        // Assemble b
-        M.multiply(b, T);
-
-        exchangeData(b, Boundaries, myN_b);
-
-        for (int m = 0; m < myN_p; m++)
-        {
-            b[m] += Delta_t * s[m];
-        }
-
-        // Solve the linear system
-        solve(A, T, b, Boundaries, yourPoints, myN_b, myID);
-
-        // Get Max Temperature
-        tempTmax = *std::max_element(T, T + myN_p);
-        MPI_Allreduce(&tempTmax, &Tmax[l], 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-
-    } // end of time loop
-
-    if (myID == 0)
-    {
-        wtime = MPI_Wtime() - wtime; // Record the end time and calculate elapsed time
-        std::cout << "Simulation took " << wtime << " seconds with " << N_Processes << " processes"
-                  << std::endl;
-
-        // Write maximum temperature to file
-        file.open("maxTemperature.data", std::ios::out);
-        for (int m = 0; m < N_t; m++)
-        {
-            file << Tmax[m] << "\n";
-        }
-        file.close();
-    }
-
-    MPI_Buffer_detach(&buffer, &bufferSize);
-
-    // Deallocate arrays
-    for (int boundary = 0; boundary < myN_b; boundary++)
-    {
-        delete[] Boundaries[boundary].indices_;
-    }
-    delete[] Points[0];
-    delete[] Points;
-    delete[] Faces[0];
-    delete[] Faces;
-    delete[] Elements[0];
-    delete[] Elements;
-    delete[] Boundaries;
-    delete[] T;
-    delete[] s;
-    delete[] b;
-    delete[] buffer;
-
-    MPI_Finalize();
-
-    return 0;
-}
-
 void exchangeData(double* T, Boundary* Boundaries, int myN_b)
 {
     int yourID = 0;
@@ -648,9 +473,7 @@ void readData(char* filename,
     {
         std::cout << "Done.\n" << std::flush;
     }
-
-    return;
-} // end of readData
+}
 
 void writeData(std::fstream& file,
                double* T,
@@ -714,8 +537,7 @@ void writeData(std::fstream& file,
         file << T[m] << "\n";
     }
     file.close();
-    return;
-} // end of writeData
+}
 
 void assembleSystem(SparseMatrix& M,
                     SparseMatrix& K,
@@ -898,13 +720,29 @@ void assembleSystem(SparseMatrix& M,
     delete[] Omega;
     MPI_Barrier(MPI_COMM_WORLD);
 
-    if (myID == 0)
+    if (myID == 0) std::cout << "Done.\n" << std::flush;
+}
+
+double computeInnerProduct(double* v1, double* v2, bool* yourPoints, int N_row)
+{
+    static double myInnerProduct;
+    static double innerProduct;
+
+    myInnerProduct = 0.0;
+    innerProduct = 0.0;
+
+    for (int m = 0; m < N_row; m++)
     {
-        std::cout << "Done.\n" << std::flush;
+        if (!yourPoints[m])
+        {
+            myInnerProduct += v1[m] * v2[m];
+        }
     }
 
-    return;
-} // end of assembleSystem
+    MPI_Allreduce(&myInnerProduct, &innerProduct, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+    return innerProduct;
+}
 
 void solve(
     SparseMatrix& A, double* T, double* b, Boundary* Boundaries, bool* yourPoints, int myN_b, int myID)
@@ -1000,23 +838,139 @@ void solve(
     delete[] AT;
 }
 
-double computeInnerProduct(double* v1, double* v2, bool* yourPoints, int N_row)
+int main(int argc, char** argv)
 {
-    static double myInnerProduct;
-    static double innerProduct;
+    // Memory Allocation
+    double** Points = NULL;
+    int** Faces = NULL;
+    int** Elements = NULL;
+    Boundary* Boundaries = NULL;
+    bool* yourPoints = NULL;
+    double* buffer = NULL;
+    int myN_p = 0;
+    int myN_f = 0;
+    int myN_e = 0;
+    int myN_b = 0;
+    int myID = 0;
+    int N_Processes = 0;
+    double t = 0.0;
+    std::fstream file;
+    double wtime;
+    double* Tmax = new double[N_t];
+    double tempTmax;
 
-    myInnerProduct = 0.0;
-    innerProduct = 0.0;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myID);
+    MPI_Comm_size(MPI_COMM_WORLD, &N_Processes);
 
-    for (int m = 0; m < N_row; m++)
+    if (argc < 2)
     {
-        if (!yourPoints[m])
+        if (myID == 0)
         {
-            myInnerProduct += v1[m] * v2[m];
+            std::cerr << "No grid file specified" << std::endl;
         }
+        MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
-    MPI_Allreduce(&myInnerProduct, &innerProduct, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    readData(argv[1], Points, Faces, Elements, Boundaries, myN_p, myN_f, myN_e, myN_b, yourPoints, myID);
 
-    return innerProduct;
+    // Allocate arrays
+    double* T = new double[myN_p];
+    double* s = new double[myN_p];
+    double* b = new double[myN_p];
+    SparseMatrix M;
+    SparseMatrix K;
+    SparseMatrix A;
+
+    if (myID == 0)
+    {
+        wtime = MPI_Wtime();
+    }
+
+    // Set initial condition
+    t = t_min;
+    for (int m = 0; m < myN_p; m++)
+    {
+        T[m] = T_air;
+    }
+
+    assembleSystem(M, K, s, T, Points, Faces, Elements, Boundaries, myN_p, myN_f, myN_e, myN_b, myID);
+
+    A = M;
+
+    A.subtract(Delta_t, K); // At this point we have A = M-Delta_t*K
+
+    exchangeData(s, Boundaries, myN_b);
+
+    // writeData(file, T, myN_p, Points, myN_e, Elements,0,myID);
+
+    // Get Max Temperature
+    tempTmax = *std::max_element(T, T + myN_p);
+    MPI_Allreduce(&tempTmax, &Tmax[0], 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+    // Time marching loop
+    for (int l = 1; l < N_t; l++)
+    {
+        t += Delta_t;
+        if (myID == 0)
+        {
+            std::cout << "t = " << t << std::endl;
+        }
+
+        // Assemble b
+        M.multiply(b, T);
+
+        exchangeData(b, Boundaries, myN_b);
+
+        for (int m = 0; m < myN_p; m++)
+        {
+            b[m] += Delta_t * s[m];
+        }
+
+        // Solve the linear system
+        solve(A, T, b, Boundaries, yourPoints, myN_b, myID);
+
+        // Get Max Temperature
+        tempTmax = *std::max_element(T, T + myN_p);
+        MPI_Allreduce(&tempTmax, &Tmax[l], 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+    } // end of time loop
+
+    if (myID == 0)
+    {
+        wtime = MPI_Wtime() - wtime; // Record the end time and calculate elapsed time
+        std::cout << "Simulation took " << wtime << " seconds with " << N_Processes << " processes"
+                  << std::endl;
+
+        // Write maximum temperature to file
+        file.open("maxTemperature.data", std::ios::out);
+        for (int m = 0; m < N_t; m++)
+        {
+            file << Tmax[m] << "\n";
+        }
+        file.close();
+    }
+
+    MPI_Buffer_detach(&buffer, &bufferSize);
+
+    // Deallocate arrays
+    for (int boundary = 0; boundary < myN_b; boundary++)
+    {
+        delete[] Boundaries[boundary].indices_;
+    }
+    delete[] Points[0];
+    delete[] Points;
+    delete[] Faces[0];
+    delete[] Faces;
+    delete[] Elements[0];
+    delete[] Elements;
+    delete[] Boundaries;
+    delete[] T;
+    delete[] s;
+    delete[] b;
+    delete[] buffer;
+
+    MPI_Finalize();
+
+    return 0;
 }
