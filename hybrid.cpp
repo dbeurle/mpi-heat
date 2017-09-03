@@ -728,11 +728,8 @@ void assembleSystem(SparseMatrix& M,
 
 double computeInnerProduct(double* v1, double* v2, bool* yourPoints, int N_row)
 {
-    static double myInnerProduct;
-    static double innerProduct;
-
-    myInnerProduct = 0.0;
-    innerProduct = 0.0;
+    double myInnerProduct{0.0};
+    double innerProduct{0.0};
 
     for (int m = 0; m < N_row; m++)
     {
@@ -756,8 +753,8 @@ void solve(
     double* d = new double[N_row];
     double* Ad = new double[N_row];
     double* AT = new double[N_row];
-    static double alpha = 0.0;
-    static double beta = 0.0;
+    double alpha = 0.0;
+    double beta = 0.0;
     static double r_norm = 0.0;
     double first_r_norm = 0.0;
     double tolerance = 1.0e-8;
@@ -766,9 +763,9 @@ void solve(
     int k = 0;
     int m = 0;
     int n = 0;
-    static double r_oldTr_old = 0.0;
-    static double rTr = 0.0;
-    static double dTAd = 0.0;
+    double r_oldTr_old = 0.0;
+    double rTr = 0.0;
+    double dTAd = 0.0;
 
     memset(r_old, 0, N_row * sizeof(double));
     memset(r, 0, N_row * sizeof(double));
