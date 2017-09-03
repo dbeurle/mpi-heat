@@ -74,10 +74,10 @@ const int N_t = static_cast<int>((t_max - t_min) / Delta_t + 1);
 int bufferSize = 0;
 double* buffer = NULL;
 
-void exchangeData(Vector& T, Boundaries& boundaries)
+void exchangeData(Vector& u, Boundaries& boundaries)
 {
-    int yourID = 0;
     int tag = 0;
+
     MPI_Status status;
 
     for (int b = 0; b < boundaries.size(); b++)
@@ -86,9 +86,9 @@ void exchangeData(Vector& T, Boundaries& boundaries)
         {
             for (int p = 0; p < boundaries[b].N_; p++)
             {
-                buffer[p] = T[boundaries[b].indices_[p]];
+                buffer[p] = u[boundaries[b].indices_[p]];
             }
-            yourID = static_cast<int>(boundaries[b].value_);
+            auto const yourID = static_cast<int>(boundaries[b].value_);
             MPI_Bsend(buffer, boundaries[b].N_, MPI_DOUBLE, yourID, tag, MPI_COMM_WORLD);
         }
     }
@@ -96,11 +96,11 @@ void exchangeData(Vector& T, Boundaries& boundaries)
     {
         if (boundaries[b].type_ == "interprocess")
         {
-            yourID = static_cast<int>(boundaries[b].value_);
+            auto const yourID = static_cast<int>(boundaries[b].value_);
             MPI_Recv(buffer, boundaries[b].N_, MPI_DOUBLE, yourID, tag, MPI_COMM_WORLD, &status);
             for (int p = 0; p < boundaries[b].N_; p++)
             {
-                T[boundaries[b].indices_[p]] += buffer[p];
+                u[boundaries[b].indices_[p]] += buffer[p];
             }
         }
     }
