@@ -597,9 +597,10 @@ void assembleSystem(SparseMatrix& M,
             y[p] = Points[Faces[f][p]][1];
             z[p] = Points[Faces[f][p]][2];
         }
-        Gamma[f] = sqrt(pow((y[1] - y[0]) * (z[2] - z[0]) - (z[1] - z[0]) * (y[2] - y[0]), 2.0)
-                        + pow((z[1] - z[0]) * (x[2] - x[0]) - (x[1] - x[0]) * (z[2] - z[0]), 2.0)
-                        + pow((x[1] - x[0]) * (y[2] - y[0]) - (y[1] - y[0]) * (x[2] - x[0]), 2.0))
+        Gamma[f] = std::sqrt(
+                       std::pow((y[1] - y[0]) * (z[2] - z[0]) - (z[1] - z[0]) * (y[2] - y[0]), 2)
+                       + std::pow((z[1] - z[0]) * (x[2] - x[0]) - (x[1] - x[0]) * (z[2] - z[0]), 2)
+                       + std::pow((x[1] - x[0]) * (y[2] - y[0]) - (y[1] - y[0]) * (x[2] - x[0]), 2))
                    / 2.0;
     }
 
@@ -614,7 +615,7 @@ void assembleSystem(SparseMatrix& M,
             z[p] = Points[Elements[e][p]][2];
         }
 
-        Omega[e] = fabs(
+        Omega[e] = std::abs(
             (x[0] * y[1] * z[2] - x[0] * y[2] * z[1] - x[1] * y[0] * z[2] + x[1] * y[2] * z[0]
              + x[2] * y[0] * z[1] - x[2] * y[1] * z[0] - x[0] * y[1] * z[3] + x[0] * y[3] * z[1]
              + x[1] * y[0] * z[3] - x[1] * y[3] * z[0] - x[3] * y[0] * z[1] + x[3] * y[1] * z[0]
@@ -792,7 +793,7 @@ void solve(
 
     r_oldTr_old = computeInnerProduct(r_old, r_old, yourPoints, N_row);
 
-    first_r_norm = sqrt(r_oldTr_old);
+    first_r_norm = std::sqrt(r_oldTr_old);
     r_norm = 1.0;
 
     // Conjugate Gradient iterative loop
