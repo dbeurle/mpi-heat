@@ -378,7 +378,7 @@ void readData(char* filename,
               int& myN_f,
               int& myN_e,
               int& myN_b,
-              bool*& yourPoints,
+              std::vector<bool>& yourPoints,
               int myID)
 {
     std::fstream file;
@@ -412,10 +412,8 @@ void readData(char* filename,
     Points[0] = new double[myN_p * numDims];
     Faces[0] = new int[myN_f * nodesPerFace];
     Elements[0] = new int[myN_e * nodesPerElement];
-    yourPoints = new bool[myN_p];
 
-    // sets all yourPoints to false
-    memset(yourPoints, false, myN_p * sizeof(bool));
+    yourPoints.resize(myN_p, false);
 
     for (int p = 1, pp = numDims; p < myN_p; p++, pp += numDims)
     {
@@ -725,7 +723,7 @@ void assembleSystem(SparseMatrix& M,
     if (myID == 0) std::cout << "Done.\n" << std::flush;
 }
 
-double computeInnerProduct(double* v1, double* v2, bool* yourPoints, int N_row)
+double computeInnerProduct(double* v1, double* v2, std::vector<bool> const& yourPoints, int N_row)
 {
     double myInnerProduct{0.0};
     double innerProduct{0.0};
@@ -737,14 +735,17 @@ double computeInnerProduct(double* v1, double* v2, bool* yourPoints, int N_row)
             myInnerProduct += v1[m] * v2[m];
         }
     }
-
     MPI_Allreduce(&myInnerProduct, &innerProduct, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
     return innerProduct;
 }
 
-void solve(
-    SparseMatrix& A, double* T, double* b, Boundary* Boundaries, bool* yourPoints, int myN_b, int myID)
+void solve(SparseMatrix& A,
+           double* T,
+           double* b,
+           Boundary* Boundaries,
+           std::vector<bool> const& yourPoints,
+           int myN_b,
+           int myID)
 {
     int N_row = A.getNrow();
 
@@ -774,8 +775,7 @@ void solve(
 
     // Conjugate Gradient iterative loop
     double tolerance = 1.0e-8;
-    int maxIterations = 2000;
-    int iter = 0;
+    int maxIterations = 2000, iter = 0;
     while (r_norm > tolerance && iter < maxIterations)
     {
         A.multiply(Ad.data(), d.data());
@@ -819,7 +819,9 @@ int main(int argc, char** argv)
     int** Faces = NULL;
     int** Elements = NULL;
     Boundary* Boundaries = NULL;
-    bool* yourPoints = NULL;
+
+    std::vector<bool> yourPoints;
+
     double* buffer = NULL;
     int myN_p = 0;
     int myN_f = 0;
