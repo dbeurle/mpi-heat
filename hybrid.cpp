@@ -35,14 +35,12 @@ using Vector = Eigen::VectorXd;
 using Vector3 = Eigen::Vector3d;
 using SparseMatrix = Eigen::SparseMatrix<double>;
 
-class Boundary
+struct Boundary
 {
-public:
-    Boundary() {}
     std::string name_;
     std::string type_;
     int N_;
-    int* indices_;
+    std::vector<int> indices_;
     double value_;
 };
 
@@ -57,6 +55,7 @@ constexpr double Q = 40000.0;
 constexpr double alpha_heat = k_diff / (rho * C);
 constexpr double T_air = 300.0;
 constexpr double h = -100.0;
+
 constexpr int numDims = 3;
 constexpr int nodesPerFace = 3;
 constexpr int nodesPerElement = 4;
@@ -183,7 +182,7 @@ void readData(char* filename,
     for (int b = 0; b < myN_b; b++)
     {
         file >> Boundaries[b].name_ >> Boundaries[b].type_ >> Boundaries[b].N_;
-        Boundaries[b].indices_ = new int[Boundaries[b].N_];
+        Boundaries[b].indices_.resize(Boundaries[b].N_);
         for (int n = 0; n < Boundaries[b].N_; n++)
         {
             file >> Boundaries[b].indices_[n];
@@ -350,7 +349,7 @@ void assembleSystem(SparseMatrix& M,
             / 6.0);
     }
 
-    // Assemble M, K, and s
+    // Assemble M, K and s
     std::vector<Eigen::Triplet<double>> K_triplets, M_triplets;
 
     for (int e = 0; e < myN_e; e++)
@@ -468,13 +467,13 @@ double computeInnerProduct(Vector const& v1,
     return innerProduct;
 }
 
-void solve(SparseMatrix& A,
-           Vector& u,
-           Vector& b,
-           Boundary* Boundaries,
-           std::vector<bool> const& yourPoints,
-           int myN_b,
-           int myID)
+void linear_solve(SparseMatrix& A,
+                  Vector& u,
+                  Vector& b,
+                  Boundary* Boundaries,
+                  std::vector<bool> const& yourPoints,
+                  int myN_b,
+                  int myID)
 {
     auto const N_row = A.rows();
 
@@ -543,10 +542,14 @@ int main(int argc, char** argv)
     int myN_f = 0;
     int myN_e = 0;
     int myN_b = 0;
+
     int myID = 0;
     int N_Processes = 0;
+
     double t = 0.0;
+
     std::fstream file;
+
     double* Tmax = new double[N_t];
     double tempTmax;
 
@@ -556,25 +559,21 @@ int main(int argc, char** argv)
 
     if (argc < 2)
     {
-        if (myID == 0)
-        {
-            std::cerr << "No grid file specified" << std::endl;
-        }
+        if (myID == 0) std::cerr << "No grid file specified" << std::endl;
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
     readData(argv[1], Points, Faces, Elements, Boundaries, myN_p, myN_f, myN_e, myN_b, yourPoints, myID);
-
-    // Allocate arrays
-    Vector s(myN_p), b(myN_p);
-
-    SparseMatrix M, K;
 
     double wtime = (myID == 0) ? MPI_Wtime() : 0.0;
 
     // Set initial condition
     t = t_min;
     Vector u = Vector::Ones(myN_p) * T_air;
+
+    // Allocate arrays
+    Vector s(myN_p), b(myN_p);
+    SparseMatrix M, K;
 
     assembleSystem(M, K, s, u, Points, Faces, Elements, Boundaries, myN_p, myN_f, myN_e, myN_b, myID);
 
@@ -585,7 +584,7 @@ int main(int argc, char** argv)
     // writeData(file, T, myN_p, Points, myN_e, Elements,0,myID);
 
     // Get Max Temperature
-    tempTmax = *std::max_element(u.data(), u.data() + myN_p);
+    tempTmax = u.maxCoeff();
     MPI_Allreduce(&tempTmax, &Tmax[0], 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 
     // Time marching loop
@@ -595,18 +594,16 @@ int main(int argc, char** argv)
 
         if (myID == 0) std::cout << "t = " << t << std::endl;
 
-        // Assemble b
         b = M * u;
 
         exchangeData(b, Boundaries, myN_b);
 
         b += Delta_t * s;
 
-        // Solve the linear system
-        solve(A, u, b, Boundaries, yourPoints, myN_b, myID);
+        linear_solve(A, u, b, Boundaries, yourPoints, myN_b, myID);
 
         // Get Max Temperature
-        tempTmax = *std::max_element(u.data(), u.data() + myN_p);
+        tempTmax = u.maxCoeff();
         MPI_Allreduce(&tempTmax, &Tmax[l], 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     }
 
@@ -628,10 +625,6 @@ int main(int argc, char** argv)
     MPI_Buffer_detach(&buffer, &bufferSize);
 
     // Deallocate arrays
-    for (int boundary = 0; boundary < myN_b; boundary++)
-    {
-        delete[] Boundaries[boundary].indices_;
-    }
     delete[] Points[0];
     delete[] Points;
     delete[] Faces[0];
