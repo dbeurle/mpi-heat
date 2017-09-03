@@ -25,8 +25,12 @@
 #include <string>
 #include <vector>
 
+#include <eigen3/Eigen/Dense>
+
 #include <mpi.h>
 #include <omp.h>
+
+using Vector3 = Eigen::Vector3d;
 
 // Class definitions
 class SparseMatrix
@@ -379,9 +383,12 @@ void readData(char* filename,
     std::fstream file;
     std::string temp;
     char myFileName[64];
+
     int myMaxN_sp = 0;
     int myMaxN_sb = 0;
+
     int maxN_sp = 0;
+
     int yourID = 0;
 
     if (myID == 0)
@@ -566,10 +573,6 @@ void assembleSystem(SparseMatrix& M,
     double z[nodesPerElement];
     double G[numDims][nodesPerElement];
 
-    // for dot product
-    double Gp[numDims] = {0.0, 0.0, 0.0};
-    double Gq[numDims] = {0.0, 0.0, 0.0};
-
     double M_e[nodesPerElement][nodesPerElement] = {{2.0, 1.0, 1.0, 1.0},
                                                     {1.0, 2.0, 1.0, 1.0},
                                                     {1.0, 1.0, 2.0, 1.0},
@@ -659,21 +662,18 @@ void assembleSystem(SparseMatrix& M,
         for (int p = 0; p < nodesPerElement; p++)
         {
             auto const m = Nodes[p];
-            Gp[0] = G[0][p];
-            Gp[1] = G[1][p];
-            Gp[2] = G[2][p];
+
+            Vector3 const Gp(G[0][p], G[1][p], G[2][p]);
 
             // Inner loop over each node
             for (int q = 0; q < nodesPerElement; q++)
             {
                 auto const n = Nodes[q];
-                Gq[0] = G[0][q];
-                Gq[1] = G[1][q];
-                Gq[2] = G[2][q];
+
+                Vector3 const Gq(G[0][q], G[1][q], G[2][q]);
 
                 M(m, n) += M_e[p][q] * Omega[e] / 20.0;
-                K(m, n) -= alpha_heat * (Gp[0] * Gq[0] + Gp[1] * Gq[1] + Gp[2] * Gq[2])
-                           / (36.0 * Omega[e]);
+                K(m, n) -= alpha_heat * Gp.dot(Gq) / (36.0 * Omega[e]);
             }
         }
     }
