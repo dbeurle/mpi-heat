@@ -203,9 +203,9 @@ public:
     }
     inline void multiply(double* u, double* v)
     {
-// Note: This function will perform a matrix vector multiplication with the
-// input vector v, returning the output in u.
-#pragma omp for
+        // Note: This function will perform a matrix vector multiplication with the
+        // input vector v, returning the output in u.
+
         for (int m = 0; m < N_row_; m++)
         {
             u[m] = 0.0;
@@ -214,20 +214,20 @@ public:
                 u[m] += val_[k] * v[col_[k]];
             }
         }
-        return;
     }
+
     inline void subtract(double u, SparseMatrix& A)
     {
-#pragma omp for
         for (int k = 0; k < N_nz_; k++)
         {
             val_[k] -= (u * A.val_[k]);
         }
-
-        return;
     }
+
     inline int getNnz() { return N_nz_; }
+
     inline int getNrow() { return N_row_; }
+
     void print(const char* name)
     {
         std::fstream matrix;
@@ -939,98 +939,66 @@ void solve(
         std::cout << "Solving... " << std::endl;
     }
 
-#pragma omp parallel default(shared)
+    // Compute the initial residual
+    A.multiply(AT, T);
+
+    exchangeData(AT, Boundaries, myN_b);
+
+    for (m = 0; m < N_row; m++)
     {
-        // Compute the initial residual
-        A.multiply(AT, T);
+        r_old[m] = b[m] - AT[m];
+        d[m] = r_old[m];
+    }
 
-#pragma omp single
-        {
-            exchangeData(AT, Boundaries, myN_b);
-        }
+    r_oldTr_old = computeInnerProduct(r_old, r_old, yourPoints, N_row);
 
-#pragma omp for private(m)
+    first_r_norm = sqrt(r_oldTr_old);
+    r_norm = 1.0;
+
+    // Conjugate Gradient iterative loop
+    while (r_norm > tolerance && iter < maxIterations)
+    {
+        A.multiply(Ad, d);
+
+        exchangeData(Ad, Boundaries, myN_b);
+
+        dTAd = computeInnerProduct(d, Ad, yourPoints, N_row);
+
+        alpha = r_oldTr_old / dTAd;
+
         for (m = 0; m < N_row; m++)
         {
-            r_old[m] = b[m] - AT[m];
-            d[m] = r_old[m];
+            T[m] += alpha * d[m];
+            r[m] = r_old[m] - alpha * Ad[m];
         }
 
-        r_oldTr_old = computeInnerProduct(r_old, r_old, yourPoints, N_row);
+        rTr = computeInnerProduct(r, r, yourPoints, N_row);
 
-#pragma omp single
+        beta = rTr / r_oldTr_old;
+
+        for (m = 0; m < N_row; m++)
         {
-            first_r_norm = sqrt(r_oldTr_old);
-            r_norm = 1.0;
+            d[m] = r[m] + beta * d[m];
+            r_old[m] = r[m];
         }
 
-        // Conjugate Gradient iterative loop
-        while (r_norm > tolerance && iter < maxIterations)
-        {
-            A.multiply(Ad, d);
+        r_oldTr_old = rTr;
 
-#pragma omp single
-            {
-                exchangeData(Ad, Boundaries, myN_b);
-            }
+        r_norm = std::sqrt(rTr) / first_r_norm;
+        iter++;
+    }
 
-            dTAd = computeInnerProduct(d, Ad, yourPoints, N_row);
+    if (myID == 0)
+    {
+        std::cout << ", iter = " << iter << ", r_norm = " << r_norm << std::endl;
+    }
 
-#pragma omp single
-            {
-                alpha = r_oldTr_old / dTAd;
-            }
-
-#pragma omp for private(m)
-            for (m = 0; m < N_row; m++)
-            {
-                T[m] += alpha * d[m];
-                r[m] = r_old[m] - alpha * Ad[m];
-            }
-
-            rTr = computeInnerProduct(r, r, yourPoints, N_row);
-
-#pragma omp single
-            {
-                beta = rTr / r_oldTr_old;
-            }
-
-#pragma omp for private(m)
-            for (m = 0; m < N_row; m++)
-            {
-                d[m] = r[m] + beta * d[m];
-                r_old[m] = r[m];
-            }
-
-#pragma omp single
-            {
-                r_oldTr_old = rTr;
-
-                r_norm = std::sqrt(rTr) / first_r_norm;
-                iter++;
-            }
-
-        } // end of while loop
-
-#pragma omp single
-        {
-            if (myID == 0)
-            {
-                std::cout << ", iter = " << iter << ", r_norm = " << r_norm << std::endl;
-            }
-
-            delete[] r_old;
-            delete[] r;
-            delete[] d;
-            delete[] Ad;
-            delete[] AT;
-        }
-
-    } // end of pragma omp parallel
-
-    return;
-
-} // end of solve
+    delete[] r_old;
+    delete[] r;
+    delete[] d;
+    delete[] Ad;
+    delete[] AT;
+}
 
 double computeInnerProduct(double* v1, double* v2, bool* yourPoints, int N_row)
 {
@@ -1040,9 +1008,6 @@ double computeInnerProduct(double* v1, double* v2, bool* yourPoints, int N_row)
     myInnerProduct = 0.0;
     innerProduct = 0.0;
 
-    int m;
-
-#pragma omp for schedule(static) reduction(+ : myInnerProduct)
     for (int m = 0; m < N_row; m++)
     {
         if (!yourPoints[m])
@@ -1051,10 +1016,7 @@ double computeInnerProduct(double* v1, double* v2, bool* yourPoints, int N_row)
         }
     }
 
-#pragma omp single
-    {
-        MPI_Allreduce(&myInnerProduct, &innerProduct, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    }
+    MPI_Allreduce(&myInnerProduct, &innerProduct, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
     return innerProduct;
 }
