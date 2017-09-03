@@ -18,13 +18,14 @@
 /////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
-#include <cstring>
+#include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
-#include <math.h>
+#include <string>
+
 #include <mpi.h>
 #include <omp.h>
-#include <stdlib.h>
 
 // Class definitions
 class SparseMatrix
