@@ -308,25 +308,26 @@ public:
 };
 
 // Global variables
-const double t_min = 0.00;
-const double t_max = 100.0;
-const double Delta_t = 1.0;
-const double rho = 8754.0;
-const double C = 380.0;
-const double k_diff = 386.0;
-const double Q = 40000.0;
-const double alpha_heat = k_diff / (rho * C);
-const double T_air = 300.0;
-const double h = -100.0;
-const int numDims = 3;
-const int nodesPerFace = 3;
-const int nodesPerElement = 4;
+constexpr double t_min = 0.00;
+constexpr double t_max = 100.0;
+constexpr double Delta_t = 1.0;
+constexpr double rho = 8754.0;
+constexpr double C = 380.0;
+constexpr double k_diff = 386.0;
+constexpr double Q = 40000.0;
+constexpr double alpha_heat = k_diff / (rho * C);
+constexpr double T_air = 300.0;
+constexpr double h = -100.0;
+constexpr int numDims = 3;
+constexpr int nodesPerFace = 3;
+constexpr int nodesPerElement = 4;
 
-const double neumann_source_constant = Q / (3.0 * rho * C);
-const double robin_source_constant = T_air * h / (3.0 * rho * C);
-const double robin_stiffness_constant = h / (12.0 * rho * C);
+constexpr double neumann_source_constant = Q / (3.0 * rho * C);
+constexpr double robin_source_constant = T_air * h / (3.0 * rho * C);
+constexpr double robin_stiffness_constant = h / (12.0 * rho * C);
 
 const int N_t = static_cast<int>((t_max - t_min) / Delta_t + 1);
+
 int bufferSize = 0;
 double* buffer = NULL;
 
