@@ -404,6 +404,9 @@ void readData(char* filename,
     Elements[0] = new int[myN_e * nodesPerElement];
     yourPoints = new bool[myN_p];
 
+    // sets all yourPoints to false
+    memset(yourPoints, false, myN_p * sizeof(bool));
+
     for (int p = 1, pp = numDims; p < myN_p; p++, pp += numDims)
     {
         Points[p] = &Points[0][pp];
@@ -416,9 +419,6 @@ void readData(char* filename,
     {
         Elements[e] = &Elements[0][ee];
     }
-
-    // sets all yourPoints to false
-    memset(yourPoints, false, myN_p * sizeof(bool));
 
     file >> temp;
     for (int p = 0; p < myN_p; p++)
