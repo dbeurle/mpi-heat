@@ -26,281 +26,14 @@
 #include <vector>
 
 #include <eigen3/Eigen/Dense>
+#include <eigen3/Eigen/SparseCore>
 
 #include <mpi.h>
 #include <omp.h>
 
 using Vector = Eigen::VectorXd;
 using Vector3 = Eigen::Vector3d;
-
-// Class definitions
-class SparseMatrix
-{
-public:
-    SparseMatrix(int nrow, int nnzperrow)
-    {
-        // This constructor is called if we happen to know the number of rows
-        // and an estimate of the number of nonzero entries per row.
-        this->initialize(nrow, nnzperrow);
-    }
-
-    SparseMatrix()
-    {
-        // This constructor is called if we have no useful information
-        N_row_ = 0;
-        N_nz_ = 0;
-        N_nz_rowmax_ = 0;
-        allocSize_ = 0;
-        val_ = NULL;
-        col_ = NULL;
-        row_ = NULL;
-        nnzs_ = NULL;
-    }
-
-    ~SparseMatrix()
-    {
-        if (val_) delete[] val_;
-        if (col_) delete[] col_;
-        if (row_) delete[] row_;
-        if (nnzs_) delete[] nnzs_;
-    }
-
-    void initialize(int nrow, int nnzperrow)
-    {
-        N_row_ = nrow;
-        N_nz_ = 0;
-        N_nz_rowmax_ = nnzperrow;
-        allocSize_ = N_row_ * N_nz_rowmax_;
-        val_ = new double[allocSize_];
-        col_ = new int[allocSize_];
-        row_ = new int[N_row_ + 1];
-        nnzs_ = new int[N_row_ + 1];
-
-        memset(val_, 0, allocSize_ * sizeof(double));
-        memset(col_, -1, allocSize_ * sizeof(int));
-        memset(row_, 0, (N_row_ + 1) * sizeof(int));
-        memset(nnzs_, 0, (N_row_ + 1) * sizeof(int));
-
-        for (int k = 0, kk = 0; k < N_row_; k++, kk += N_nz_rowmax_)
-        {
-            row_[k] = kk;
-        }
-        return;
-    }
-
-    void finalize()
-    {
-        int minCol = 0;
-        int insertPos = 0;
-        int index = 0;
-
-        // Now that the matrix is assembled we can set N_nz_rowmax_ explicitly by
-        // taking the largest value in the nnzs_ array
-        N_nz_rowmax_ = 0;
-        for (int m = 0; m < N_row_; m++)
-        {
-            N_nz_rowmax_ = std::max(N_nz_rowmax_, nnzs_[m]);
-        }
-
-        double* tempVal = new double[N_nz_];
-        int* tempCol = new int[N_nz_];
-        int* tempRow = new int[N_row_ + 1];
-        // This array will help us sort the column indices
-        bool* isSorted = new bool[allocSize_];
-
-        memset(tempVal, 0, N_nz_ * sizeof(double));
-        memset(tempCol, 0, N_nz_ * sizeof(int));
-        memset(tempRow, 0, (N_row_ + 1) * sizeof(int));
-        memset(isSorted, 0, allocSize_ * sizeof(bool));
-
-        for (int m = 0; m < N_row_; m++)
-        {
-            for (int k = row_[m]; k < (row_[m] + nnzs_[m]); k++)
-            {
-                minCol = N_row_ + 1;
-                for (int kk = row_[m]; kk < (row_[m] + nnzs_[m]); kk++)
-                {
-                    if (!isSorted[kk] && col_[kk] < minCol)
-                    {
-                        index = kk;
-                        minCol = col_[index];
-                    }
-                }
-                tempVal[insertPos] = val_[index];
-                tempCol[insertPos] = col_[index];
-                isSorted[index] = true;
-                insertPos++;
-            }
-            tempRow[m + 1] = tempRow[m] + nnzs_[m];
-        }
-
-        delete[] val_;
-        delete[] col_;
-        delete[] row_;
-        delete[] nnzs_;
-        delete[] isSorted;
-
-        val_ = tempVal;
-        col_ = tempCol;
-        row_ = tempRow;
-        nnzs_ = NULL;
-        allocSize_ = N_nz_;
-
-        return;
-    }
-
-    inline double& operator()(int m, int n)
-    {
-        // If the arrays are already full and inserting this entry would cause us to
-        // run off the end,
-        // then we'll need to resize the arrays before inserting it
-        if (nnzs_[m] >= N_nz_rowmax_)
-        {
-            this->reallocate();
-        }
-
-        int k = row_[m];
-        bool foundEntry = false;
-
-        // Search between row(m) and row(m+1) for col(k) = n (i.e. is the entry
-        // already in the matrix)
-        while (k < (row_[m] + nnzs_[m]) && !foundEntry)
-        {
-            if (col_[k] == n)
-            {
-                foundEntry = true;
-            }
-            k++;
-        }
-        // If the entry is already in the matrix, then return a reference to it
-        if (foundEntry)
-        {
-            return val_[k - 1];
-        }
-        // If the entry is not already in the matrix then we'll need to insert it
-        else
-        {
-            N_nz_++;
-            nnzs_[m]++;
-            col_[k] = n;
-            return val_[k];
-        }
-    }
-
-    inline double& operator()(int k) { return val_[k]; }
-
-    void operator=(const SparseMatrix& A)
-    {
-        if (val_) delete[] val_;
-        if (col_) delete[] col_;
-        if (row_) delete[] row_;
-        if (nnzs_) delete[] nnzs_;
-
-        N_row_ = A.N_row_;
-        N_nz_ = A.N_nz_;
-        N_nz_rowmax_ = A.N_nz_rowmax_;
-        allocSize_ = A.allocSize_;
-        val_ = new double[allocSize_];
-        col_ = new int[allocSize_];
-        row_ = new int[N_row_ + 1];
-
-        memcpy(val_, A.val_, N_nz_ * sizeof(double));
-        memcpy(col_, A.col_, N_nz_ * sizeof(int));
-        memcpy(row_, A.row_, (N_row_ + 1) * sizeof(int));
-    }
-    inline void multiply(double* u, double* v)
-    {
-        // Note: This function will perform a matrix vector multiplication with the
-        // input vector v, returning the output in u.
-
-        for (int m = 0; m < N_row_; m++)
-        {
-            u[m] = 0.0;
-            for (int k = row_[m]; k < row_[m + 1]; k++)
-            {
-                u[m] += val_[k] * v[col_[k]];
-            }
-        }
-    }
-
-    inline void subtract(double u, SparseMatrix& A)
-    {
-        for (int k = 0; k < N_nz_; k++)
-        {
-            val_[k] -= (u * A.val_[k]);
-        }
-    }
-
-    inline int getNnz() { return N_nz_; }
-
-    inline int getNrow() { return N_row_; }
-
-    void print(const char* name)
-    {
-        std::fstream matrix;
-        std::cout << "Matrix " << name << " has " << N_row_ << " rows with " << N_nz_
-                  << " non-zero entries - " << allocSize_ << " allocated." << std::flush;
-        matrix.open(name, std::ios::out);
-        matrix << "Mat = [" << std::endl;
-        for (int m = 0; m < N_row_; m++)
-        {
-            for (int n = row_[m]; n < row_[m + 1]; n++)
-            {
-                matrix << m + 1 << "\t" << col_[n] + 1 << "\t" << val_[n] << std::endl;
-            }
-        }
-        matrix << "];" << std::endl;
-        matrix.close();
-        std::cout << " Done." << std::flush << std::endl;
-        return;
-    }
-
-protected:
-    void reallocate()
-    {
-        // Double the memory allocation size
-        N_nz_rowmax_ *= 2;
-
-        allocSize_ = N_nz_rowmax_ * N_row_;
-
-        // Create some temporary arrays of the new size
-        double* tempVal = new double[allocSize_];
-        int* tempCol = new int[allocSize_];
-
-        memset(tempVal, 0, allocSize_ * sizeof(double));
-        memset(tempCol, 0, allocSize_ * sizeof(int));
-
-        for (int m = 0, mm = 0; m < N_row_; m++, mm += N_nz_rowmax_)
-        {
-            memcpy(&tempVal[mm], &val_[row_[m]], nnzs_[m] * sizeof(double));
-            memcpy(&tempCol[mm], &col_[row_[m]], nnzs_[m] * sizeof(int));
-            row_[m] = mm;
-        }
-
-        // Delete the memory used by the old arrays
-        delete[] val_;
-        delete[] col_;
-
-        // Assign the addresses of the new arrays
-        val_ = tempVal;
-        col_ = tempCol;
-
-        return;
-    }
-
-private:
-    double* val_;     // [N_nz]    Stores the nonzero elements of the matrix
-    int* col_;        // [N_nz]    Stores the column indices of the elements in each row
-    int* row_;        // [N_row+1] Stores the locations in val that start a row
-    int* nnzs_;       // [N_row+1] Stores the number of nonzero entries per row during
-                      // the assembly process
-    int N_row_;       // The number of rows in the matrix
-    int N_nz_;        // The number of non-zero entries currently stored in the matrix
-    int N_nz_rowmax_; // The maximum number of non-zero entries per row. This will
-                      // be an estimate until the matrix is assembled
-    int allocSize_;   // The number of non-zero entries currently allocated for in
-                      // val_ and col_
-};
+using SparseMatrix = Eigen::SparseMatrix<double>;
 
 class Boundary
 {
@@ -562,34 +295,26 @@ void assembleSystem(SparseMatrix& M,
                     int myN_b,
                     int myID)
 {
-    if (myID == 0)
-    {
-        std::cout << "Assembling system... " << std::flush;
-    }
+    if (myID == 0) std::cout << "Assembling system... " << std::flush;
 
     double x[nodesPerElement];
     double y[nodesPerElement];
     double z[nodesPerElement];
-    double G[numDims][nodesPerElement];
 
     double M_e[nodesPerElement][nodesPerElement] = {{2.0, 1.0, 1.0, 1.0},
                                                     {1.0, 2.0, 1.0, 1.0},
                                                     {1.0, 1.0, 2.0, 1.0},
                                                     {1.0, 1.0, 1.0, 2.0}};
     double K_e[nodesPerFace][nodesPerFace] = {{2.0, 1.0, 1.0}, {1.0, 2.0, 1.0}, {1.0, 1.0, 2.0}};
-    double s_e[nodesPerElement] = {1.0, 1.0, 1.0, 1.0};
+
     int Nodes[nodesPerElement] = {0, 0, 0, 0};
 
     std::vector<double> Omega(myN_e);
     std::vector<double> Gamma(myN_f);
 
-    for (int p = 0; p < myN_p; p++)
-    {
-        s[p] = 0.0;
-    }
+    s.setZero();
 
     // Calculate face areas
-
     for (int f = 0; f < myN_f; f++)
     {
         for (int p = 0; p < nodesPerFace; p++)
@@ -606,7 +331,6 @@ void assembleSystem(SparseMatrix& M,
     }
 
     // Calculate element volumes
-
     for (int e = 0; e < myN_e; e++)
     {
         for (int p = 0; p < nodesPerElement; p++)
@@ -627,9 +351,7 @@ void assembleSystem(SparseMatrix& M,
     }
 
     // Assemble M, K, and s
-
-    M.initialize(myN_p, 10); // floor(0.02*myN_p));
-    K.initialize(myN_p, 10); // floor(0.02*myN_p));
+    std::vector<Eigen::Triplet<double>> K_triplets, M_triplets;
 
     for (int e = 0; e < myN_e; e++)
     {
@@ -641,7 +363,7 @@ void assembleSystem(SparseMatrix& M,
             z[p] = Points[Nodes[p]][2];
         }
 
-        double G[numDims][nodesPerElement] =
+        double const G[numDims][nodesPerElement] =
             {{(y[3] - y[1]) * (z[2] - z[1]) - (y[2] - y[1]) * (z[3] - z[1]),
               (y[2] - y[0]) * (z[3] - z[2]) - (y[2] - y[3]) * (z[0] - z[2]),
               (y[1] - y[3]) * (z[0] - z[3]) - (y[0] - y[3]) * (z[1] - z[3]),
@@ -671,14 +393,13 @@ void assembleSystem(SparseMatrix& M,
 
                 Vector3 const Gq(G[0][q], G[1][q], G[2][q]);
 
-                M(m, n) += M_e[p][q] * Omega[e] / 20.0;
-                K(m, n) -= alpha_heat * Gp.dot(Gq) / (36.0 * Omega[e]);
+                K_triplets.emplace_back(m, n, -alpha_heat * Gp.dot(Gq) / (36.0 * Omega[e]));
+                M_triplets.emplace_back(m, n, M_e[p][q] * Omega[e] / 20.0);
             }
         }
     }
 
     // Apply boundary conditions
-
     for (int b = 0; b < myN_b; b++)
     {
         if (Boundaries[b].type_ == "neumann")
@@ -707,16 +428,21 @@ void assembleSystem(SparseMatrix& M,
                     {
                         Nodes[q] = Faces[Boundaries[b].indices_[f]][q];
                         auto const n = Nodes[q];
-                        K(m, n) += Gamma[Boundaries[b].indices_[f]] * robin_stiffness_constant
-                                   * K_e[p][q];
+                        K_triplets.emplace_back(m,
+                                                n,
+                                                Gamma[Boundaries[b].indices_[f]]
+                                                    * robin_stiffness_constant * K_e[p][q]);
                     }
                 }
             }
         }
     }
 
-    K.finalize();
-    M.finalize();
+    M.resize(myN_p, myN_p);
+    K.resize(myN_p, myN_p);
+
+    K.setFromTriplets(K_triplets.begin(), K_triplets.end());
+    M.setFromTriplets(M_triplets.begin(), M_triplets.end());
 
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -743,27 +469,23 @@ double computeInnerProduct(Vector const& v1,
 }
 
 void solve(SparseMatrix& A,
-           Vector& T,
+           Vector& u,
            Vector& b,
            Boundary* Boundaries,
            std::vector<bool> const& yourPoints,
            int myN_b,
            int myID)
 {
-    int N_row = A.getNrow();
-
-    Vector r = Vector::Zero(N_row);
-    Vector Ad = Vector::Zero(N_row);
-    Vector AT = Vector::Zero(N_row);
+    auto const N_row = A.rows();
 
     if (myID == 0) std::cout << "Solving..." << std::endl;
 
     // Compute the initial residual
-    A.multiply(AT.data(), T.data());
+    Vector Au = A * u;
 
-    exchangeData(AT, Boundaries, myN_b);
+    exchangeData(Au, Boundaries, myN_b);
 
-    Vector r_old = b - AT;
+    Vector r_old = b - Au;
 
     Vector d = r_old;
 
@@ -777,7 +499,7 @@ void solve(SparseMatrix& A,
     int maxIterations = 2000, iter = 0;
     while (r_norm > tolerance && iter < maxIterations)
     {
-        A.multiply(Ad.data(), d.data());
+        Vector Ad = A * d;
 
         exchangeData(Ad, Boundaries, myN_b);
 
@@ -785,11 +507,9 @@ void solve(SparseMatrix& A,
 
         auto const alpha = r_oldTr_old / dTAd;
 
-        for (int m = 0; m < N_row; m++)
-        {
-            T[m] += alpha * d[m];
-            r[m] = r_old[m] - alpha * Ad[m];
-        }
+        u += alpha * d;
+
+        Vector const r = r_old - alpha * Ad;
 
         auto const rTr = computeInnerProduct(r, r, yourPoints, N_row);
 
@@ -801,6 +521,7 @@ void solve(SparseMatrix& A,
         r_oldTr_old = rTr;
 
         r_norm = std::sqrt(rTr) / first_r_norm;
+
         iter++;
     }
 
@@ -857,9 +578,7 @@ int main(int argc, char** argv)
 
     assembleSystem(M, K, s, u, Points, Faces, Elements, Boundaries, myN_p, myN_f, myN_e, myN_b, myID);
 
-    SparseMatrix A = M;
-
-    A.subtract(Delta_t, K); // At this point we have A = M-Delta_t*K
+    SparseMatrix A = M - Delta_t * K;
 
     exchangeData(s, Boundaries, myN_b);
 
@@ -877,7 +596,7 @@ int main(int argc, char** argv)
         if (myID == 0) std::cout << "t = " << t << std::endl;
 
         // Assemble b
-        M.multiply(b.data(), u.data());
+        b = M * u;
 
         exchangeData(b, Boundaries, myN_b);
 
@@ -889,8 +608,7 @@ int main(int argc, char** argv)
         // Get Max Temperature
         tempTmax = *std::max_element(u.data(), u.data() + myN_p);
         MPI_Allreduce(&tempTmax, &Tmax[l], 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-
-    } // end of time loop
+    }
 
     if (myID == 0)
     {
