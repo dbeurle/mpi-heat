@@ -337,7 +337,7 @@ const int N_t = static_cast<int>((t_max - t_min) / Delta_t + 1);
 int bufferSize = 0;
 double* buffer = NULL;
 
-void exchangeData(double* T, Boundary* Boundaries, int myN_b)
+void exchangeData(Vector& T, Boundary* Boundaries, int myN_b)
 {
     int yourID = 0;
     int tag = 0;
@@ -550,8 +550,8 @@ void writeData(std::fstream& file,
 
 void assembleSystem(SparseMatrix& M,
                     SparseMatrix& K,
-                    double* s,
-                    double* T,
+                    Vector& s,
+                    Vector& T,
                     double** Points,
                     int** Faces,
                     int** Elements,
@@ -723,7 +723,10 @@ void assembleSystem(SparseMatrix& M,
     if (myID == 0) std::cout << "Done.\n" << std::flush;
 }
 
-double computeInnerProduct(double* v1, double* v2, std::vector<bool> const& yourPoints, int N_row)
+double computeInnerProduct(Vector const& v1,
+                           Vector const& v2,
+                           std::vector<bool> const& yourPoints,
+                           int N_row)
 {
     double myInnerProduct{0.0};
     double innerProduct{0.0};
@@ -740,8 +743,8 @@ double computeInnerProduct(double* v1, double* v2, std::vector<bool> const& your
 }
 
 void solve(SparseMatrix& A,
-           double* T,
-           double* b,
+           Vector& T,
+           Vector& b,
            Boundary* Boundaries,
            std::vector<bool> const& yourPoints,
            int myN_b,
@@ -752,12 +755,12 @@ void solve(SparseMatrix& A,
     Vector r = Vector::Zero(N_row);
     Vector r_old = Vector::Zero(N_row);
     Vector Ad = Vector::Zero(N_row);
+    Vector AT = Vector::Zero(N_row);
 
     if (myID == 0) std::cout << "Solving..." << std::endl;
 
     // Compute the initial residual
-    double* AT = new double[N_row];
-    A.multiply(AT, T);
+    A.multiply(AT.data(), T.data());
 
     exchangeData(AT, Boundaries, myN_b);
 
@@ -768,7 +771,7 @@ void solve(SparseMatrix& A,
 
     Vector d = r_old;
 
-    auto r_oldTr_old = computeInnerProduct(r_old.data(), r_old.data(), yourPoints, N_row);
+    auto r_oldTr_old = computeInnerProduct(r_old, r_old, yourPoints, N_row);
 
     auto const first_r_norm = std::sqrt(r_oldTr_old);
     auto r_norm = first_r_norm;
@@ -780,9 +783,9 @@ void solve(SparseMatrix& A,
     {
         A.multiply(Ad.data(), d.data());
 
-        exchangeData(Ad.data(), Boundaries, myN_b);
+        exchangeData(Ad, Boundaries, myN_b);
 
-        auto const dTAd = computeInnerProduct(d.data(), Ad.data(), yourPoints, N_row);
+        auto const dTAd = computeInnerProduct(d, Ad, yourPoints, N_row);
 
         auto const alpha = r_oldTr_old / dTAd;
 
@@ -792,7 +795,7 @@ void solve(SparseMatrix& A,
             r[m] = r_old[m] - alpha * Ad[m];
         }
 
-        auto const rTr = computeInnerProduct(r.data(), r.data(), yourPoints, N_row);
+        auto const rTr = computeInnerProduct(r, r, yourPoints, N_row);
 
         auto const beta = rTr / r_oldTr_old;
 
@@ -805,11 +808,7 @@ void solve(SparseMatrix& A,
         iter++;
     }
 
-    if (myID == 0)
-    {
-        std::cout << ", iter = " << iter << ", r_norm = " << r_norm << std::endl;
-    }
-    delete[] AT;
+    if (myID == 0) std::cout << ", iter = " << iter << ", r_norm = " << r_norm << std::endl;
 }
 
 int main(int argc, char** argv)
@@ -831,7 +830,6 @@ int main(int argc, char** argv)
     int N_Processes = 0;
     double t = 0.0;
     std::fstream file;
-    double wtime;
     double* Tmax = new double[N_t];
     double tempTmax;
 
@@ -851,28 +849,19 @@ int main(int argc, char** argv)
     readData(argv[1], Points, Faces, Elements, Boundaries, myN_p, myN_f, myN_e, myN_b, yourPoints, myID);
 
     // Allocate arrays
-    double* T = new double[myN_p];
-    double* s = new double[myN_p];
-    double* b = new double[myN_p];
-    SparseMatrix M;
-    SparseMatrix K;
-    SparseMatrix A;
+    Vector s(myN_p), b(myN_p);
 
-    if (myID == 0)
-    {
-        wtime = MPI_Wtime();
-    }
+    SparseMatrix M, K;
+
+    double wtime = (myID == 0) ? MPI_Wtime() : 0.0;
 
     // Set initial condition
     t = t_min;
-    for (int m = 0; m < myN_p; m++)
-    {
-        T[m] = T_air;
-    }
+    Vector u = Vector::Ones(myN_p) * T_air;
 
-    assembleSystem(M, K, s, T, Points, Faces, Elements, Boundaries, myN_p, myN_f, myN_e, myN_b, myID);
+    assembleSystem(M, K, s, u, Points, Faces, Elements, Boundaries, myN_p, myN_f, myN_e, myN_b, myID);
 
-    A = M;
+    SparseMatrix A = M;
 
     A.subtract(Delta_t, K); // At this point we have A = M-Delta_t*K
 
@@ -881,33 +870,28 @@ int main(int argc, char** argv)
     // writeData(file, T, myN_p, Points, myN_e, Elements,0,myID);
 
     // Get Max Temperature
-    tempTmax = *std::max_element(T, T + myN_p);
+    tempTmax = *std::max_element(u.data(), u.data() + myN_p);
     MPI_Allreduce(&tempTmax, &Tmax[0], 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 
     // Time marching loop
     for (int l = 1; l < N_t; l++)
     {
         t += Delta_t;
-        if (myID == 0)
-        {
-            std::cout << "t = " << t << std::endl;
-        }
+
+        if (myID == 0) std::cout << "t = " << t << std::endl;
 
         // Assemble b
-        M.multiply(b, T);
+        M.multiply(b.data(), u.data());
 
         exchangeData(b, Boundaries, myN_b);
 
-        for (int m = 0; m < myN_p; m++)
-        {
-            b[m] += Delta_t * s[m];
-        }
+        b += Delta_t * s;
 
         // Solve the linear system
-        solve(A, T, b, Boundaries, yourPoints, myN_b, myID);
+        solve(A, u, b, Boundaries, yourPoints, myN_b, myID);
 
         // Get Max Temperature
-        tempTmax = *std::max_element(T, T + myN_p);
+        tempTmax = *std::max_element(u.data(), u.data() + myN_p);
         MPI_Allreduce(&tempTmax, &Tmax[l], 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 
     } // end of time loop
@@ -941,9 +925,7 @@ int main(int argc, char** argv)
     delete[] Elements[0];
     delete[] Elements;
     delete[] Boundaries;
-    delete[] T;
-    delete[] s;
-    delete[] b;
+
     delete[] buffer;
 
     MPI_Finalize();
