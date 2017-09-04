@@ -3,10 +3,8 @@
 //
 // Problem:		dT/dt = alpha_heat * Grad^2 T
 //
-// Method:		Finite Element Method with linear 3D tetrahedral
-// elements
-//				and Implicit Euler Method and Conjugate Gradient
-// Method
+// Method:		Finite Element Method with linear 3D tetrahedral elements
+//				and Implicit Euler Method and Conjugate Gradient Method
 //
 // Allocate 1 Node on Avoca:    salloc -N 1 -t1:00:00 --account VR0084
 //
