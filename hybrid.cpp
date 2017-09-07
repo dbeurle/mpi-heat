@@ -85,6 +85,7 @@ public:
     {
         if (buffer_send_size > 0)
         {
+            char* buffer_send = nullptr;
             MPI_Buffer_detach(&buffer_send, &buffer_send_size);
             delete[] buffer_send;
             buffer_send = nullptr;
@@ -204,7 +205,6 @@ private:
 
     double start_time = 0.0;
 
-    char* buffer_send = nullptr;
     int buffer_send_size = 0;
 };
 
@@ -309,14 +309,6 @@ void read_data(std::string const& filename,
 
     parallel.allocate_double_buffer(shared_points, local_shared_boundaries);
 
-    // Allocate the largest buffer required
-    // buffer = new double[shared_points];
-
-    // Include the buffer overhead in the computation
-    // bufferSize = (shared_points * sizeof(double) + MPI_BSEND_OVERHEAD) * local_shared_boundaries;
-
-    // MPI_Buffer_attach(new char[bufferSize], bufferSize);
-
     file.close();
 
     if (parallel.is_master()) std::cout << "Done.\n" << std::flush;
@@ -325,7 +317,7 @@ void read_data(std::string const& filename,
 void write_data(Vector const& T,
                 Points const& points,
                 Elements const& elements,
-                int l,
+                int const l,
                 ParallelCommunicator const& parallel)
 {
     char myFileName[64];
@@ -546,7 +538,6 @@ void assemble_system(SparseMatrix& M,
     K.setFromTriplets(K_triplets.begin(), K_triplets.end());
     M.setFromTriplets(M_triplets.begin(), M_triplets.end());
 
-    parallel.barrier();
     if (parallel.is_master()) std::cout << "done" << std::endl;
     parallel.barrier();
 }
@@ -572,8 +563,8 @@ double compute_dot_product(Vector const& v1,
 
 void linear_solve(SparseMatrix const& A,
                   Vector& u,
-                  Vector& b,
-                  Boundaries& boundaries,
+                  Vector const& b,
+                  Boundaries const& boundaries,
                   std::vector<bool> const& yourPoints,
                   ParallelCommunicator const& parallel)
 {
@@ -672,7 +663,7 @@ int main(int argc, char** argv)
     {
         t += Delta_t;
 
-        if (parallel.is_master()) std::cout << "t = " << t << std::endl;
+        if (parallel.is_master()) std::cout << "Simulation time = " << t << "s\n";
 
         b = M * u;
 
@@ -681,6 +672,8 @@ int main(int argc, char** argv)
         b += Delta_t * s;
 
         linear_solve(A, u, b, boundaries, yourPoints, parallel);
+
+        if (l % 10 == 0) write_data(u, points, elements, l, parallel);
 
         Tmax[l] = parallel.maximum(u.maxCoeff());
     }
