@@ -3,10 +3,8 @@
 //
 // Problem:		dT/dt = alpha_heat * Grad^2 T
 //
-// Method:		Finite Element Method with linear 3D tetrahedral
-// elements
-//				and Implicit Euler Method and Conjugate Gradient
-// Method
+// Method:		Finite Element Method with linear 3D tetrahedral elements
+//				and Implicit Euler Method and Conjugate Gradient Method
 //
 // Allocate 1 Node on Avoca:    salloc -N 1 -t1:00:00 --account VR0084
 //
@@ -31,24 +29,6 @@
 #include <mpi.h>
 #include <omp.h>
 
-struct Boundary
-{
-    std::string name_;
-    std::string type_;
-    int N_;
-    std::vector<int> indices_;
-    double value_;
-};
-
-using Vector = Eigen::VectorXd;
-using Vector3 = Eigen::Vector3d;
-using SparseMatrix = Eigen::SparseMatrix<double>;
-
-using Points = std::vector<std::array<double, 3>>;
-using Faces = std::vector<std::array<int, 3>>;
-using Elements = std::vector<std::array<int, 4>>;
-using Boundaries = std::vector<Boundary>;
-
 // Global variables
 constexpr double t_min = 0.00;
 constexpr double t_max = 100.0;
@@ -71,69 +51,209 @@ constexpr double robin_stiffness_constant = h / (12.0 * rho * C);
 
 const int N_t = static_cast<int>((t_max - t_min) / Delta_t + 1);
 
-int bufferSize = 0;
-double* buffer = NULL;
-
-void exchangeData(Vector& u, Boundaries& boundaries)
+struct Boundary
 {
-    int tag = 0;
+    std::string name_;
+    std::string type_;
+    int N_;
+    std::vector<int> indices_;
+    int neighbour_process_;
+};
 
-    MPI_Status status;
+using Vector = Eigen::VectorXd;
+using Vector3 = Eigen::Vector3d;
+using SparseMatrix = Eigen::SparseMatrix<double>;
 
-    for (int b = 0; b < boundaries.size(); b++)
+using Points = std::vector<std::array<double, 3>>;
+using Faces = std::vector<std::array<int, 3>>;
+using Elements = std::vector<std::array<int, 4>>;
+using Boundaries = std::vector<Boundary>;
+
+class ParallelCommunicator
+{
+public:
+    ParallelCommunicator(int argc, char** argv)
     {
-        if (boundaries[b].type_ == "interprocess")
+        MPI_Init(&argc, &argv);
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        MPI_Comm_size(MPI_COMM_WORLD, &processes);
+
+        start_time = MPI_Wtime();
+    }
+
+    ~ParallelCommunicator()
+    {
+        if (buffer_send_size > 0)
         {
-            for (int p = 0; p < boundaries[b].N_; p++)
-            {
-                buffer[p] = u[boundaries[b].indices_[p]];
-            }
-            auto const yourID = static_cast<int>(boundaries[b].value_);
-            MPI_Bsend(buffer, boundaries[b].N_, MPI_DOUBLE, yourID, tag, MPI_COMM_WORLD);
+            char* buffer_send = nullptr;
+            MPI_Buffer_detach(&buffer_send, &buffer_send_size);
+            delete[] buffer_send;
+            buffer_send = nullptr;
+        }
+        MPI_Finalize();
+    }
+
+    auto elapsed_time() const { return MPI_Wtime() - start_time; }
+
+    auto process_rank() const { return rank; }
+
+    auto is_master() const { return rank == 0; }
+
+    auto number_of_processes() const { return processes; }
+
+    void abort() const { MPI_Abort(MPI_COMM_WORLD, 1); }
+
+    void barrier() const { MPI_Barrier(MPI_COMM_WORLD); }
+
+    // void wait() const {}
+
+    // void wait_all() const {}
+
+    double maximum(double const partial_max) const
+    {
+        double total_max;
+        MPI_Allreduce(&partial_max, &total_max, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        return total_max;
+    }
+
+    int maximum(int const partial_max) const
+    {
+        int total_max;
+        MPI_Allreduce(&partial_max, &total_max, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+        return total_max;
+    }
+
+    double sum(double const partial_sum) const
+    {
+        double total_sum;
+        MPI_Allreduce(&partial_sum, &total_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+        return total_sum;
+    }
+
+    int sum(int const partial_sum) const
+    {
+        int total_sum;
+        MPI_Allreduce(&partial_sum, &total_sum, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+        return total_sum;
+    }
+
+    std::vector<int> receive(std::vector<int> buffer, int const source) const
+    {
+        MPI_Status status;
+
+        // Probe for an incoming message from process zero
+        MPI_Probe(source, 0, MPI_COMM_WORLD, &status);
+
+        // When probe returns, the status object has the size and other
+        // attributes of the incoming message. Get the message size
+        int buffer_size = 0;
+        MPI_Get_count(&status, MPI_INT, &buffer_size);
+
+        // Allocate a buffer to hold the incoming numbers
+        buffer.resize(buffer_size);
+
+        // Now receive the message with the allocated buffer
+        MPI_Recv(buffer.data(), buffer_size, MPI_INT, source, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        return buffer;
+    }
+
+    std::vector<double> receive(std::vector<double> buffer, int const source) const
+    {
+        MPI_Status status;
+
+        // Probe for an incoming message
+        MPI_Probe(source, 0, MPI_COMM_WORLD, &status);
+
+        // When probe returns, the status object has the size and other
+        // attributes of the incoming message. Get the message size
+        int buffer_size = 0;
+        MPI_Get_count(&status, MPI_DOUBLE, &buffer_size);
+
+        // Allocate a buffer to hold the incoming numbers
+        buffer.resize(buffer_size);
+
+        // Now receive the message with the allocated buffer
+        MPI_Recv(buffer.data(), buffer.size(), MPI_DOUBLE, source, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        return buffer;
+    }
+
+    void allocate_double_buffer(int const inner_size, int const outer_size)
+    {
+        // Include the buffer overhead in the computation
+        buffer_send_size = (inner_size * sizeof(double) + MPI_BSEND_OVERHEAD) * outer_size;
+
+        MPI_Buffer_attach(new char[buffer_send_size], buffer_send_size);
+    }
+
+    void buffered_send(std::vector<double> const& buffer, int const destination) const
+    {
+        assert(buffer_send_size >= buffer.size());
+
+        MPI_Bsend(buffer.data(),   // Initial buffer address
+                  buffer.size(),   // Size
+                  MPI_DOUBLE,      // Datatype
+                  destination,     // Destination
+                  0,               // Message tag
+                  MPI_COMM_WORLD); // Communicator
+    }
+
+private:
+    int rank = 0;
+    int processes = 1;
+
+    double start_time = 0.0;
+
+    int buffer_send_size = 0;
+};
+
+void exchange_data(Vector& u, Boundaries const& boundaries, ParallelCommunicator const& parallel)
+{
+    for (auto const& boundary : boundaries)
+    {
+        if (boundary.type_ == "interprocess")
+        {
+            std::vector<double> buffer;
+            buffer.reserve(boundary.N_);
+
+            for (auto const& i : boundary.indices_) buffer.push_back(u[i]);
+
+            parallel.buffered_send(buffer, boundary.neighbour_process_);
         }
     }
-    for (int b = 0; b < boundaries.size(); b++)
+
+    for (auto const& boundary : boundaries)
     {
-        if (boundaries[b].type_ == "interprocess")
+        if (boundary.type_ == "interprocess")
         {
-            auto const yourID = static_cast<int>(boundaries[b].value_);
-            MPI_Recv(buffer, boundaries[b].N_, MPI_DOUBLE, yourID, tag, MPI_COMM_WORLD, &status);
-            for (int p = 0; p < boundaries[b].N_; p++)
+            auto const buffer = parallel.receive(std::vector<double>{}, boundary.neighbour_process_);
+
+            for (int p = 0; p < boundary.N_; p++)
             {
-                u[boundaries[b].indices_[p]] += buffer[p];
+                u[boundary.indices_[p]] += buffer[p];
             }
         }
     }
 }
 
-void readData(std::string const& filename,
-              Points& points,
-              Faces& faces,
-              Elements& elements,
-              Boundaries& boundaries,
-              std::vector<bool>& yourPoints,
-              int myID)
+void read_data(std::string const& filename,
+               Points& points,
+               Faces& faces,
+               Elements& elements,
+               Boundaries& boundaries,
+               std::vector<bool>& yourPoints,
+               ParallelCommunicator& parallel)
 {
     std::fstream file;
     std::string temp;
 
-    int myMaxN_sp = 0;
-    int myMaxN_sb = 0;
+    if (parallel.is_master()) std::cout << "Reading " << filename << "'s... " << std::flush;
 
-    int maxN_sp = 0;
-
-    int yourID = 0;
-
-    if (myID == 0) std::cout << "Reading " << filename << "'s... " << std::flush;
-
-    file.open(filename + std::to_string(myID));
+    file.open(filename + std::to_string(parallel.process_rank()));
 
     int myN_p, myN_f, myN_e, myN_b;
-
-    file >> temp >> myN_p;
-    file >> temp >> myN_f;
-    file >> temp >> myN_e;
-    file >> temp >> myN_b;
+    file >> temp >> myN_p >> temp >> myN_f >> temp >> myN_e >> temp >> myN_b;
 
     points.resize(myN_p);
     faces.resize(myN_f);
@@ -142,74 +262,72 @@ void readData(std::string const& filename,
     boundaries.resize(myN_b);
 
     file >> temp;
-    for (auto& point : points)
-    {
-        file >> point[0] >> point[1] >> point[2];
-    }
+    for (auto& point : points) file >> point[0] >> point[1] >> point[2];
 
     file >> temp;
-    for (auto& face : faces)
-    {
-        file >> face[0] >> face[1] >> face[2];
-    }
+    for (auto& face : faces) file >> face[0] >> face[1] >> face[2];
 
     file >> temp;
-    for (auto& element : elements)
-    {
-        file >> element[0] >> element[1] >> element[2] >> element[3];
-    }
+    for (auto& element : elements) file >> element[0] >> element[1] >> element[2] >> element[3];
+
+    int max_local_shared_points = 0;
+    int local_shared_boundaries = 0;
 
     file >> temp;
-    for (int b = 0; b < myN_b; b++)
+    for (auto& boundary : boundaries)
     {
-        file >> boundaries[b].name_ >> boundaries[b].type_ >> boundaries[b].N_;
+        file >> boundary.name_ >> boundary.type_ >> boundary.N_;
 
-        boundaries[b].indices_.resize(boundaries[b].N_);
+        boundary.indices_.resize(boundary.N_);
 
-        for (int n = 0; n < boundaries[b].N_; n++)
+        for (auto& index : boundary.indices_) file >> index;
+
+        double neighbour_process{0.0};
+
+        file >> neighbour_process;
+
+        boundary.neighbour_process_ = static_cast<int>(neighbour_process);
+
+        if (boundary.type_ == "interprocess")
         {
-            file >> boundaries[b].indices_[n];
-        }
+            local_shared_boundaries++;
 
-        file >> boundaries[b].value_;
+            max_local_shared_points = std::max(max_local_shared_points, boundary.N_);
 
-        if (boundaries[b].type_ == "interprocess")
-        {
-            myMaxN_sb++;
-            myMaxN_sp = std::max(myMaxN_sp, boundaries[b].N_);
-            yourID = static_cast<int>(boundaries[b].value_);
-            if (yourID > myID)
+            if (boundary.neighbour_process_ > parallel.process_rank())
             {
-                for (int p = 0; p < boundaries[b].N_; p++)
-                {
-                    yourPoints[boundaries[b].indices_[p]] = true;
-                }
+                for (auto const& index : boundary.indices_) yourPoints[index] = true;
             }
         }
     }
 
-    MPI_Allreduce(&myMaxN_sp, &maxN_sp, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
-    buffer = new double[maxN_sp];
-    bufferSize = (maxN_sp * sizeof(double) + MPI_BSEND_OVERHEAD) * myMaxN_sb;
-    MPI_Buffer_attach(new char[bufferSize], bufferSize);
+    std::cout << "Process " << parallel.process_rank() << " has " << max_local_shared_points
+              << " shared points and " << local_shared_boundaries << " shared boundaries\n";
+
+    // Determine the maximum size the buffer needs to be
+    int const shared_points = parallel.maximum(max_local_shared_points);
+
+    parallel.allocate_double_buffer(shared_points, local_shared_boundaries);
 
     file.close();
 
-    if (myID == 0) std::cout << "Done.\n" << std::flush;
+    if (parallel.is_master()) std::cout << "Done.\n" << std::flush;
 }
 
-void writeData(std::fstream& file,
-               double* T,
-               int myN_p,
-               Points const& points,
-               int myN_e,
-               Elements const& elements,
-               int l,
-               int myID)
+void write_data(Vector const& T,
+                Points const& points,
+                Elements const& elements,
+                int const l,
+                ParallelCommunicator const& parallel)
 {
     char myFileName[64];
-    sprintf(myFileName, "Temperature_iter_%03d_%06d.vtk", myID, l);
+    sprintf(myFileName, "Temperature_iter_%03d_%06d.vtk", parallel.process_rank(), l);
+
+    std::fstream file;
     file.open(myFileName, std::ios::out);
+
+    auto const myN_p = points.size();
+    auto const myN_e = elements.size();
 
     // VTK file output
     // Header
@@ -227,24 +345,23 @@ void writeData(std::fstream& file,
     // Point Coordinates
     file << "POINTS " << myN_p << " double"
          << "\n";
-    for (int m = 0; m < myN_p; m++)
+    for (auto const& point : points)
     {
-        file << points[m][0] << "\t" << points[m][1] << "\t" << points[m][2] << "\n";
+        file << point[0] << "\t" << point[1] << "\t" << point[2] << "\n";
     }
     // Element/Cell Nodes
     file << "CELLS " << myN_e << "\t" << 5 * myN_e << "\n";
-    for (int e = 0; e < myN_e; e++)
+    for (auto const& element : elements)
     {
         file << "4"
-             << "\t" << elements[e][0] << "\t" << elements[e][1] << "\t" << elements[e][2] << "\t"
-             << elements[e][3] << "\n";
+             << "\t" << element[0] << "\t" << element[1] << "\t" << element[2] << "\t" << element[3]
+             << "\n";
     }
     // Element/Cell types
     file << "CELL_TYPES " << myN_e << "\n";
-    for (int e = 0; e < myN_e; e++)
+    for (auto const& element : elements)
     {
-        file << "10"
-             << "\n";
+        file << "10\n";
     }
     // Temperature
     file << "POINT_DATA " << myN_p << "\n";
@@ -255,24 +372,24 @@ void writeData(std::fstream& file,
     file << "LOOKUP_TABLE "
          << "default"
          << "\n";
-    for (int m = 0; m < myN_p; m++)
+    for (int m = 0; m < T.size(); m++)
     {
         file << T[m] << "\n";
     }
     file.close();
 }
 
-void assembleSystem(SparseMatrix& M,
-                    SparseMatrix& K,
-                    Vector& s,
-                    Vector& T,
-                    Points const& points,
-                    Faces const& faces,
-                    Elements const& elements,
-                    Boundaries& boundaries,
-                    int myID)
+void assemble_system(SparseMatrix& M,
+                     SparseMatrix& K,
+                     Vector& s,
+                     Vector& T,
+                     Points const& points,
+                     Faces const& faces,
+                     Elements const& elements,
+                     Boundaries& boundaries,
+                     ParallelCommunicator const& parallel)
 {
-    if (myID == 0) std::cout << "Assembling system... " << std::flush;
+    if (parallel.is_master()) std::cout << "Assembling system... " << std::flush;
 
     double x[nodesPerElement];
     double y[nodesPerElement];
@@ -421,51 +538,46 @@ void assembleSystem(SparseMatrix& M,
     K.setFromTriplets(K_triplets.begin(), K_triplets.end());
     M.setFromTriplets(M_triplets.begin(), M_triplets.end());
 
-    MPI_Barrier(MPI_COMM_WORLD);
-
-    if (myID == 0) std::cout << "Done.\n" << std::flush;
+    if (parallel.is_master()) std::cout << "done" << std::endl;
+    parallel.barrier();
 }
 
-double computeInnerProduct(Vector const& v1,
+double compute_dot_product(Vector const& v1,
                            Vector const& v2,
                            std::vector<bool> const& yourPoints,
-                           int N_row)
+                           ParallelCommunicator const& parallel)
 {
-    double myInnerProduct{0.0};
-    double innerProduct{0.0};
+    double inner_product{0.0};
 
-    for (int m = 0; m < N_row; m++)
+    assert(v1.rows() == v2.rows());
+
+    for (auto m = 0; m < v1.rows(); m++)
     {
         if (!yourPoints[m])
         {
-            myInnerProduct += v1[m] * v2[m];
+            inner_product += v1[m] * v2[m];
         }
     }
-    MPI_Allreduce(&myInnerProduct, &innerProduct, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    return innerProduct;
+    return parallel.sum(inner_product);
 }
 
-void linear_solve(SparseMatrix& A,
+void linear_solve(SparseMatrix const& A,
                   Vector& u,
-                  Vector& b,
-                  Boundaries& boundaries,
+                  Vector const& b,
+                  Boundaries const& boundaries,
                   std::vector<bool> const& yourPoints,
-                  int myID)
+                  ParallelCommunicator const& parallel)
 {
-    auto const N_row = A.rows();
-
-    if (myID == 0) std::cout << "Solving..." << std::endl;
-
     // Compute the initial residual
     Vector Au = A * u;
 
-    exchangeData(Au, boundaries);
+    exchange_data(Au, boundaries, parallel);
 
     Vector r_old = b - Au;
 
     Vector d = r_old;
 
-    auto r_oldTr_old = computeInnerProduct(r_old, r_old, yourPoints, N_row);
+    auto r_oldTr_old = compute_dot_product(r_old, r_old, yourPoints, parallel);
 
     auto const first_r_norm = std::sqrt(r_oldTr_old);
     auto r_norm = first_r_norm;
@@ -477,9 +589,9 @@ void linear_solve(SparseMatrix& A,
     {
         Vector Ad = A * d;
 
-        exchangeData(Ad, boundaries);
+        exchange_data(Ad, boundaries, parallel);
 
-        auto const dTAd = computeInnerProduct(d, Ad, yourPoints, N_row);
+        auto const dTAd = compute_dot_product(d, Ad, yourPoints, parallel);
 
         auto const alpha = r_oldTr_old / dTAd;
 
@@ -487,7 +599,7 @@ void linear_solve(SparseMatrix& A,
 
         Vector const r = r_old - alpha * Ad;
 
-        auto const rTr = computeInnerProduct(r, r, yourPoints, N_row);
+        auto const rTr = compute_dot_product(r, r, yourPoints, parallel);
 
         auto const beta = rTr / r_oldTr_old;
 
@@ -501,41 +613,31 @@ void linear_solve(SparseMatrix& A,
         iter++;
     }
 
-    if (myID == 0) std::cout << ", iter = " << iter << ", r_norm = " << r_norm << std::endl;
+    if (parallel.is_master())
+    {
+        std::cout << "Conjugate gradient iterations = " << iter << ", residual = " << r_norm
+                  << std::endl;
+    }
 }
 
 int main(int argc, char** argv)
 {
-    // Memory Allocation
+    ParallelCommunicator parallel(argc, argv);
+
     Points points;
     Faces faces;
     Elements elements;
     Boundaries boundaries;
     std::vector<bool> yourPoints;
-
-    double* buffer = NULL;
-
-    int myID = 0;
-    int N_Processes = 0;
-
-    std::fstream file;
-
-    double* Tmax = new double[N_t];
-    double tempTmax;
-
-    MPI_Init(&argc, &argv);
-    MPI_Comm_rank(MPI_COMM_WORLD, &myID);
-    MPI_Comm_size(MPI_COMM_WORLD, &N_Processes);
+    std::vector<double> Tmax(N_t);
 
     if (argc < 2)
     {
-        if (myID == 0) std::cerr << "No grid file specified" << std::endl;
-        MPI_Abort(MPI_COMM_WORLD, 1);
+        if (parallel.is_master()) std::cerr << "No grid file specified" << std::endl;
+        parallel.abort();
     }
 
-    readData(argv[1], points, faces, elements, boundaries, yourPoints, myID);
-
-    double wtime = (myID == 0) ? MPI_Wtime() : 0.0;
+    read_data(argv[1], points, faces, elements, boundaries, yourPoints, parallel);
 
     // Set initial condition
     double t = t_min;
@@ -543,60 +645,49 @@ int main(int argc, char** argv)
 
     // Allocate arrays
     Vector s(points.size()), b(points.size());
+
     SparseMatrix M, K;
 
-    assembleSystem(M, K, s, u, points, faces, elements, boundaries, myID);
+    assemble_system(M, K, s, u, points, faces, elements, boundaries, parallel);
 
-    SparseMatrix A = M - Delta_t * K;
+    SparseMatrix const A = M - Delta_t * K;
 
-    exchangeData(s, boundaries);
+    exchange_data(s, boundaries, parallel);
 
-    // writeData(file, T, myN_p, points, myN_e, elements,0,myID);
+    write_data(u, points, elements, 0, parallel);
 
-    // Get Max Temperature
-    tempTmax = u.maxCoeff();
-    MPI_Allreduce(&tempTmax, &Tmax[0], 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    Tmax[0] = parallel.maximum(u.maxCoeff());
 
-    // Time marching loop
+    // Time solver loop
     for (int l = 1; l < N_t; l++)
     {
         t += Delta_t;
 
-        if (myID == 0) std::cout << "t = " << t << std::endl;
+        if (parallel.is_master()) std::cout << "Simulation time = " << t << "s\n";
 
         b = M * u;
 
-        exchangeData(b, boundaries);
+        exchange_data(b, boundaries, parallel);
 
         b += Delta_t * s;
 
-        linear_solve(A, u, b, boundaries, yourPoints, myID);
+        linear_solve(A, u, b, boundaries, yourPoints, parallel);
 
-        // Get Max Temperature
-        tempTmax = u.maxCoeff();
-        MPI_Allreduce(&tempTmax, &Tmax[l], 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        if (l % 10 == 0) write_data(u, points, elements, l, parallel);
+
+        Tmax[l] = parallel.maximum(u.maxCoeff());
     }
 
-    if (myID == 0)
+    if (parallel.is_master())
     {
-        wtime = MPI_Wtime() - wtime; // Record the end time and calculate elapsed time
-        std::cout << "Simulation took " << wtime << " seconds with " << N_Processes << " processes"
-                  << std::endl;
+        std::cout << "Simulation took " << parallel.elapsed_time() << " seconds with "
+                  << parallel.number_of_processes() << " processes" << std::endl;
 
         // Write maximum temperature to file
+        std::fstream file;
         file.open("maxTemperature.data", std::ios::out);
-        for (int m = 0; m < N_t; m++)
-        {
-            file << Tmax[m] << "\n";
-        }
+        for (auto const T : Tmax) file << T << std::endl;
         file.close();
     }
-
-    MPI_Buffer_detach(&buffer, &bufferSize);
-
-    delete[] buffer;
-
-    MPI_Finalize();
-
     return 0;
 }
